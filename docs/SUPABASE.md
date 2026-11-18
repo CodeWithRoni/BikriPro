@@ -45,7 +45,7 @@ Deploy it in one of these ways:
 1. **Automatic (recommended):** add a GitHub secret `SUPABASE_ACCESS_TOKEN` (a scoped personal access token from supabase.com → Account → Access Tokens). Every push to `main` that touches the backend runs **Deploy API to Supabase**.
 2. **Supabase CLI:** `supabase functions deploy api --project-ref pnhaxcbxhbjvqzpohbet --no-verify-jwt --use-api`
 
-New database migrations are applied with `supabase db push` (or by pasting the SQL into the dashboard SQL editor).
+New database migrations are applied with `supabase db push` (or by pasting the SQL into the dashboard SQL editor). A brand-new project gets the schema, server secrets, default admin, accounts, categories and the image bucket from the three files in `supabase/migrations/`.
 
 ## Birthday SMS schedule
 
@@ -53,7 +53,7 @@ Created once in the SQL editor (already done for the `bikripro` project):
 
 ```sql
 create extension if not exists pg_cron;
-create extension if not exists pg_net;
+create extension if not exists pg_net with schema extensions;
 select cron.schedule('bikripro-birthday-sms', '0 4 * * *', $$
   select net.http_post(
     url     := 'https://pnhaxcbxhbjvqzpohbet.supabase.co/functions/v1/api/cron/birthdays',
