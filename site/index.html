@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BikriPro — POS &amp; ERP for clothing shops in Bangladesh</title>
+  <meta name="description" content="BikriPro is a simple, fast POS and ERP for garments and clothing shops in Bangladesh: sales, credit sales with due reminders, stock by size and colour, purchases, ledgers, bKash/Nagad, barcode labels, loyalty points and SMS." />
+  <meta name="theme-color" content="#1a7cee" />
+  <link rel="icon" type="image/png" href="assets/favicon.png" />
+  <meta property="og:title" content="BikriPro — POS for clothing shops" />
+  <meta property="og:description" content="Sales, stock, credit dues, ledgers, barcode labels and loyalty — on Windows, Mac, Linux, Android and iPhone." />
+  <meta property="og:image" content="assets/pos.webp" />
+  <style>
+    :root { --ocean: #1a7cee; --ocean-d: #1365db; --ink: #0f172a; --muted: #64748b; --bg: #f8fafc; --line: #e2e8f0; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; font-family: Inter, "Hind Siliguri", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); line-height: 1.55; }
+    a { color: inherit; text-decoration: none; }
+    .wrap { max-width: 1160px; margin: 0 auto; padding: 0 20px; }
+    header { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.85); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+    header .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+    header img { height: 34px; }
+    nav a { margin-left: 22px; font-size: 15px; color: var(--muted); font-weight: 500; }
+    nav a:hover { color: var(--ocean); }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 14px; font-weight: 700; font-size: 15px; transition: transform .15s, box-shadow .15s, background .15s; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background: var(--ocean); color: #fff; box-shadow: 0 12px 28px -10px rgba(26,124,238,.6); }
+    .btn-primary:hover { background: var(--ocean-d); }
+    .btn-ghost { background: #fff; border: 1px solid var(--line); }
+    .hero { position: relative; overflow: hidden; padding: 72px 0 40px; background: radial-gradient(1200px 500px at 15% -10%, #d9efff 0, transparent 60%), radial-gradient(900px 500px at 100% 10%, #e0f2fe 0, transparent 55%); }
+    .hero h1 { font-size: clamp(32px, 5vw, 54px); line-height: 1.08; letter-spacing: -.02em; margin: 0 0 18px; max-width: 760px; }
+    .hero h1 span { color: var(--ocean); }
+    .hero p.lead { font-size: 19px; color: var(--muted); max-width: 640px; margin: 0 0 8px; }
+    .hero p.bn { font-size: 17px; color: #334155; max-width: 640px; margin: 0 0 28px; }
+    .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+    .shot { margin-top: 48px; border-radius: 20px; border: 1px solid var(--line); box-shadow: 0 30px 60px -20px rgba(19,101,219,.35); width: 100%; display: block; background: #fff; }
+    section { padding: 70px 0; }
+    h2 { font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -.015em; margin: 0 0 10px; }
+    .sub { color: var(--muted); margin: 0 0 36px; font-size: 17px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 22px; }
+    .card .ic { width: 42px; height: 42px; border-radius: 12px; background: #eef8ff; color: var(--ocean); display: grid; place-items: center; font-size: 22px; margin-bottom: 12px; }
+    .card h3 { margin: 0 0 6px; font-size: 17px; }
+    .card p { margin: 0; color: var(--muted); font-size: 15px; }
+    .split { display: grid; gap: 40px; grid-template-columns: 1.1fr .9fr; align-items: center; }
+    .split img { width: 100%; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 20px 40px -20px rgba(15,23,42,.3); }
+    ul.ticks { list-style: none; padding: 0; margin: 0; }
+    ul.ticks li { padding: 7px 0 7px 30px; position: relative; }
+    ul.ticks li::before { content: "✓"; position: absolute; left: 0; top: 7px; width: 20px; height: 20px; border-radius: 50%; background: #dcfce7; color: #16a34a; font-size: 12px; font-weight: 800; display: grid; place-items: center; }
+    .dl { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+    .dl a { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 4px; transition: border-color .15s, box-shadow .15s; }
+    .dl a:hover { border-color: var(--ocean); box-shadow: 0 10px 24px -14px rgba(26,124,238,.6); }
+    .dl b { font-size: 16px; }
+    .dl small { color: var(--muted); }
+    .band { background: linear-gradient(135deg, #1a7cee, #1365db); color: #fff; border-radius: 24px; padding: 40px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; }
+    .band h2 { color: #fff; margin: 0; }
+    .band p { margin: 6px 0 0; opacity: .9; }
+    .band .btn { background: #fff; color: var(--ocean-d); }
+    footer { padding: 34px 0 50px; color: var(--muted); font-size: 14px; text-align: center; }
+    @media (max-width: 820px) { .split { grid-template-columns: 1fr; } nav a:not(.keep) { display: none; } .hero { padding-top: 48px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <a href="#"><img src="assets/logo.png" alt="BikriPro" /></a>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="#pos">POS</a>
+        <a href="#download" class="keep">Download</a>
+        <a href="https://github.com/CodeWithRoni/BikriPro">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div class="wrap">
+      <h1>The simple POS for <span>clothing shops</span> in Bangladesh</h1>
+      <p class="lead">Sell faster, track every size and colour, never forget a customer's due, and see your real profit — from one easy app.</p>
+      <p class="bn">বিক্রি, স্টক, বাকি আদায়, হিসাব আর বারকোড — সব এক জায়গায়, সহজ বাংলাদেশি দোকানের জন্য।</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#download">⬇ Download BikriPro</a>
+        <a class="btn btn-ghost" href="app/">Open web app</a>
+      </div>
+      <img class="shot" src="assets/pos.webp" alt="BikriPro point of sale screen with a credit sale and next payment date" />
+    </div>
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <h2>Everything a garments shop needs</h2>
+      <p class="sub">Built around how Bangladeshi shops actually work — cash, bKash, Nagad, credit customers and Eid rush.</p>
+      <div class="grid">
+        <div class="card"><div class="ic">🛒</div><h3>Fast POS</h3><p>Barcode scan, hold &amp; recall bills, favourites, split payments, waive loose change, print 58/80 mm receipts.</p></div>
+        <div class="card"><div class="ic">📅</div><h3>Credit sales &amp; reminders</h3><p>Pick the next payment date (3 days, 7 days, 1 month). The dashboard reminds you the day it's due.</p></div>
+        <div class="card"><div class="ic">👕</div><h3>Size &amp; colour stock</h3><p>Variants with SKU and barcode, low-stock alerts, and product photos auto-fitted to 500×500.</p></div>
+        <div class="card"><div class="ic">📒</div><h3>Customer &amp; supplier ledgers</h3><p>Separate ledgers with date and type filters, round-off waivers, supplier rebates and commissions.</p></div>
+        <div class="card"><div class="ic">💳</div><h3>Cash, bank &amp; MFS</h3><p>Cash drawer, bKash, Nagad, Rocket, cards and banks — balances, transfers, expenses and statements.</p></div>
+        <div class="card"><div class="ic">📈</div><h3>Real profit</h3><p>Net sales, cost of goods, gross margin and net profit by day and by category.</p></div>
+        <div class="card"><div class="ic">🏷️</div><h3>Barcode labels</h3><p>Load the last purchase, choose what to print and print on A4 sheets or any thermal label size.</p></div>
+        <div class="card"><div class="ic">🎁</div><h3>Loyalty &amp; SMS</h3><p>Points per Taka spent, thank-you SMS after every purchase and automatic birthday wishes.</p></div>
+        <div class="card"><div class="ic">🛡️</div><h3>Safe &amp; controlled</h3><p>Admin / Manager / Cashier roles, activity log, one-click backup and PIN-protected reset.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pos" style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+    <div class="wrap split">
+      <img src="assets/dashboard.webp" alt="BikriPro dashboard with due collection reminders" loading="lazy" />
+      <div>
+        <h2>Know what's due, every morning</h2>
+        <p class="sub" style="margin-bottom:18px">Open the dashboard and see who owes you today, how much you sold, your stock value and what to restock.</p>
+        <ul class="ticks">
+          <li>Due collection reminders with days overdue</li>
+          <li>Today's sales, profit and collections</li>
+          <li>Receivables, payables and stock value</li>
+          <li>Best sellers, low stock and birthdays</li>
+          <li>Light and dark mode</li>
+        </ul>
+      </div>
+    </div>
+    <div class="wrap split" style="margin-top:60px">
+      <div>
+        <h2>Labels in a minute</h2>
+        <p class="sub" style="margin-bottom:18px">Pick a recent purchase and every item with its quantity is ready to print.</p>
+        <ul class="ticks">
+          <li>Shop logo, name, product, brand, size/colour, SKU, MRP — toggle each</li>
+          <li>A4 sheets: 24, 40 or 65 labels per page</li>
+          <li>Thermal presets or any custom size in mm</li>
+          <li>Live preview before printing</li>
+        </ul>
+      </div>
+      <img src="assets/barcode.webp" alt="BikriPro barcode label designer" loading="lazy" />
+    </div>
+  </section>
+
+  <section id="download">
+    <div class="wrap">
+      <h2>Download</h2>
+      <p class="sub">One shop database, any device. Install on the main PC, then connect tills, tablets and phones over Wi-Fi.</p>
+      <div class="dl">
+        <a href="https://github.com/CodeWithRoni/BikriPro/releases/latest"><b>🪟 Windows</b><small>.exe installer</small></a>
+        <a href="https://github.com/CodeWithRoni/BikriPro/releases/latest"><b>🍎 macOS</b><small>.dmg (Intel &amp; Apple Silicon)</small></a>
+        <a href="https://github.com/CodeWithRoni/BikriPro/releases/latest"><b>🐧 Linux</b><small>.deb package</small></a>
+        <a href="https://github.com/CodeWithRoni/BikriPro/releases/latest"><b>🤖 Android</b><small>.apk for phones &amp; tablets</small></a>
+        <a href="https://github.com/CodeWithRoni/BikriPro/releases/latest"><b>📱 iPhone / iPad</b><small>.ipa (needs signing)</small></a>
+        <a href="https://github.com/CodeWithRoni/BikriPro/blob/main/docs/INSTALL.md"><b>📘 Install guide</b><small>Server PC, MySQL, tills &amp; phones</small></a>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding-top:0">
+    <div class="wrap">
+      <div class="band">
+        <div>
+          <h2>Already have a BikriPro server?</h2>
+          <p>Open the web app, tap “Server” on the login screen and enter your server address.</p>
+        </div>
+        <a class="btn" href="app/">Open web app →</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <img src="assets/icon.png" alt="" width="40" height="40" style="border-radius:10px" /><br />
+    © BikriPro · Made for shops in Bangladesh · <a href="https://github.com/CodeWithRoni/BikriPro" style="color:var(--ocean)">GitHub</a>
+  </footer>
+</body>
+</html>
