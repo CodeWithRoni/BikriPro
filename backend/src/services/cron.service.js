@@ -1,0 +1,46 @@
+/**
+ * Scheduled jobs (Asia/Dhaka):
+ *  - Birthday wishes: once a day, SMS every customer whose DOB is today
+ *    (skips anyone already wished this year).
+ * Due-collection reminders are query-driven (see dashboard controller), so
+ * they appear on the dashboard the moment the due date arrives — no job needed.
+ */
+const cron = require('node-cron');
+const env = require('../config/env');
+const { query } = require('../config/db');
+const settings = require('./settings.service');
+const { sendSms, render } = require('./sms.service');
+
+async function runBirthdayWishes() {
+  const s = await settings.getAll();
+  if (s.sms_birthday !== '1') return { sent: 0, skipped: 'disabled' };
+  const customers = await query(
+    `SELECT c.id, c.name, c.phone FROM customers c
+     WHERE c.is_active = 1 AND c.dob IS NOT NULL AND c.phone IS NOT NULL
+       AND DATE_FORMAT(c.dob, '%m-%d') = DATE_FORMAT(CURDATE(), '%m-%d')
+       AND NOT EXISTS (SELECT 1 FROM sms_logs l WHERE l.customer_id = c.id AND l.purpose = 'birthday'
+                       AND YEAR(l.created_at) = YEAR(CURDATE()) AND l.status = 'sent')`
+  );
+  let sent = 0;
+  for (const c of customers) {
+    const message = render(s.sms_birthday_template, { name: c.name, shop: s.shop_name });
+    const r = await sendSms({ phone: c.phone, message, purpose: 'birthday', customerId: c.id });
+    if (r.status === 'sent') sent += 1;
+  }
+  return { sent, total: customers.length };
+}
+
+function startCron() {
+  if (!cron.validate(env.birthdayCron)) {
+    console.warn('[cron] invalid BIRTHDAY_SMS_CRON, birthday job disabled');
+    return;
+  }
+  cron.schedule(env.birthdayCron, () => {
+    runBirthdayWishes()
+      .then((r) => console.log('[cron] birthday wishes', r))
+      .catch((e) => console.error('[cron] birthday job failed', e.message));
+  }, { timezone: env.timezone });
+  console.log(`[cron] birthday SMS scheduled "${env.birthdayCron}" (${env.timezone})`);
+}
+
+module.exports = { startCron, runBirthdayWishes };

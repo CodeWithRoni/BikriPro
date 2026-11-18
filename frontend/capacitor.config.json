@@ -1,0 +1,15 @@
+{
+  "appId": "com.bikripro.pos",
+  "appName": "BikriPro",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  },
+  "ios": {
+    "contentInset": "always"
+  }
+}

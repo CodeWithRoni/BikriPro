@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# builds
+frontend/dist/
+desktop/web/
+desktop/server/
+desktop/release/
+dist-mobile/
+
+# runtime data
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

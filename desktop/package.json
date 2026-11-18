@@ -1,0 +1,109 @@
+{
+  "name": "bikripro-desktop",
+  "productName": "BikriPro",
+  "version": "1.0.0",
+  "description": "BikriPro POS & ERP for garments and clothing retail",
+  "author": "BikriPro",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "prepare-app": "node scripts/prepare.js",
+    "start": "npm run prepare-app && electron .",
+    "dev": "electron . --dev",
+    "dist:win": "npm run prepare-app && electron-builder --win nsis",
+    "dist:mac": "npm run prepare-app && electron-builder --mac dmg",
+    "dist:linux": "npm run prepare-app && electron-builder --linux deb",
+    "dist": "npm run prepare-app && electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.bikripro.pos",
+    "productName": "BikriPro",
+    "copyright": "\u00a9 BikriPro",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "build/icon.png",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "web",
+        "to": "web",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "server",
+        "to": "server",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "BikriPro-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BikriPro",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.business",
+      "artifactName": "BikriPro-${version}-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "BikriPro ${version}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icons",
+      "category": "Office",
+      "maintainer": "BikriPro <support@bikripro.app>",
+      "synopsis": "POS & ERP for clothing shops",
+      "artifactName": "bikripro_${version}_${arch}.${ext}"
+    }
+  }
+}
