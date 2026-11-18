@@ -43,7 +43,7 @@ npm run build:edge        # rebuild the bundle
 Deploy it in one of these ways:
 
 1. **Automatic (recommended):** add a GitHub secret `SUPABASE_ACCESS_TOKEN` (a scoped personal access token from supabase.com → Account → Access Tokens). Every push to `main` that touches the backend runs **Deploy API to Supabase**.
-2. **Supabase CLI:** `supabase functions deploy api --project-ref pnhaxcbxhbjvqzpohbet --no-verify-jwt --use-api`
+2. **Supabase CLI:** `supabase functions deploy api --remote=pnhaxcbxhbjvqzpohbet --no-verify-jwt --use-api --yes`
 
 New database migrations are applied with `supabase db push` (or by pasting the SQL into the dashboard SQL editor). A brand-new project gets the schema, server secrets, default admin, accounts, categories and the image bucket from the three files in `supabase/migrations/`.
 
