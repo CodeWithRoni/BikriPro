@@ -115,11 +115,11 @@ async function createSaleTx(conn, req, b, { exchange = null } = {}) {
     const r = await conn.q(
       `INSERT INTO sales (invoice_no, customer_id, user_id, subtotal, item_discount, invoice_discount, vat_amount, round_off,
         points_redeemed, points_value, grand_total, paid_amount, change_amount, due_amount, next_payment_date, cost_total, note,
-        bill_offer_id, offer_discount, exchange_credit, exchange_return_id, public_token)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        bill_offer_id, offer_discount, exchange_credit, exchange_return_id, public_token, salesperson_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [invoiceNo, customer?.id || null, req.user.id, subtotal, itemDiscount, invoiceDiscount, vat, roundOff,
         pointsRedeemed, pointsValue, grandTotal, paid, change, due, due > 0 ? b.next_payment_date : null, costTotal, b.note || null,
-        billOfferDiscount > 0 ? b.bill_offer_id : null, offerDiscount, credit, exchange?.returnId || null, newToken()]
+        billOfferDiscount > 0 ? b.bill_offer_id : null, offerDiscount, credit, exchange?.returnId || null, newToken(), b.salesperson_id || null]
     );
     const saleId = r.insertId;
 
@@ -176,7 +176,7 @@ export const create = asyncHandler(async (req, res) => {
 
 async function loadSale(id) {
   const sale = await one(
-    `SELECT s.*, u.name AS cashier FROM sales s LEFT JOIN users u ON u.id = s.user_id WHERE s.id = ?`, [id]);
+    `SELECT s.*, u.name AS cashier, e.name AS salesperson FROM sales s LEFT JOIN users u ON u.id = s.user_id LEFT JOIN employees e ON e.id = s.salesperson_id WHERE s.id = ?`, [id]);
   if (!sale) return null;
   sale.items = await query('SELECT * FROM sale_items WHERE sale_id = ? ORDER BY id', [id]);
   sale.payments = await query(

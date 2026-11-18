@@ -24,6 +24,7 @@ export function Receipt({ sale, shop }) {
         {sale.customer && !sale.customer.is_walk_in && <div className={row}><span>Customer</span><span>{sale.customer.name}</span></div>}
         {sale.customer?.phone && <div className={row}><span>Phone</span><span>{sale.customer.phone}</span></div>}
         <div className={row}><span>Cashier</span><span>{sale.cashier}</span></div>
+        {sale.salesperson && <div className={row}><span>Served by</span><span>{sale.salesperson}</span></div>}
       </div>
       {sale.items.map((i) => (
         <div key={i.id} style={{ marginBottom: 3 }}>

@@ -13,11 +13,12 @@ import PartyForm from '../components/PartyForm';
 import { Modal, Empty, Spinner } from '../components/ui';
 import { Receipt, printNode } from '../components/receipt/Receipt';
 import ShareReceipt from '../components/ShareReceipt';
+import Select from '../components/ui/Select';
 import { computeOffers } from '../utils/offers';
 import { tk, num, addDays, todayStr, variantLabel, cls, fmtDateTime } from '../utils/format';
 
 // ---------------- cart state ----------------
-const EMPTY = { items: [], customer: null, invoiceDiscount: '', roundOff: '', pointsRedeem: '', note: '', holdId: null, noOffers: false, exchange: null, leftover: 'cash' };
+const EMPTY = { items: [], customer: null, salesperson: '', invoiceDiscount: '', roundOff: '', pointsRedeem: '', note: '', holdId: null, noOffers: false, exchange: null, leftover: 'cash' };
 
 function reducer(state, a) {
   switch (a.type) {
@@ -67,6 +68,7 @@ export default function POS() {
   const accounts = useApi('/accounts');
   const held = useApi('/sales/held');
   const offersApi = useApi('/offers/active');
+  const staffApi = useApi('/staff/options');
   const shift = useApi('/cash-sessions/current');
   const role = useSelector((s) => s.auth.user?.role);
   const canExchange = role === 'manager' || role === 'admin';
@@ -137,7 +139,11 @@ export default function POS() {
     dispatch({ type: 'add', product: p });
   };
 
-  const reset = () => { dispatch({ type: 'clear' }); setPayments([]); setPayTouched(false); setDueDate(''); };
+  const reset = () => {
+    const sp = cart.salesperson; // the same salesperson usually serves the next customer too
+    dispatch({ type: 'clear' }); if (sp) dispatch({ type: 'field', key: 'salesperson', value: sp });
+    setPayments([]); setPayTouched(false); setDueDate('');
+  };
 
   const hold = async () => {
     if (!cart.items.length) return toast.error('Cart is empty');
@@ -179,7 +185,7 @@ export default function POS() {
           return { variant_id: i.variant_id, qty: n(i.qty), unit_price: n(i.unit_price), discount: n(i.discount) + (o?.amount || 0), offer_id: o?.offer_id || null, offer_discount: o?.amount || 0 };
         }),
         invoice_discount: n(cart.invoiceDiscount) + t.billOffer, bill_offer_id: offers.bill?.offer_id || null, bill_offer_discount: t.billOffer,
-        round_off: n(cart.roundOff), points_redeem: n(cart.pointsRedeem),
+        round_off: n(cart.roundOff), points_redeem: n(cart.pointsRedeem), salesperson_id: cart.salesperson || null,
         payments: payments.filter((p) => n(p.amount) > 0).map((p) => ({ ...p, amount: n(p.amount) })),
         next_payment_date: t.due > 0.009 ? dueDate : null, note: cart.note || null, hold_id: cart.holdId,
       };
@@ -219,6 +225,14 @@ export default function POS() {
           <div className="flex-1"><PartyPicker type="customer" value={cart.customer} onChange={(c) => dispatch({ type: 'field', key: 'customer', value: c })} placeholder="Walk-in customer — search…" /></div>
           <button type="button" className="btn-secondary px-3" title="Quick add customer" onClick={() => setQuickAdd(true)}><UserPlus className="h-4 w-4" /></button>
         </div>
+        {staffApi.data?.length > 0 && (
+          <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+            <span className="shrink-0">Sales person</span>
+            <Select className="input-sm py-1 text-xs" value={cart.salesperson || ''} onChange={(e) => dispatch({ type: 'field', key: 'salesperson', value: e.target.value })}>
+              <option value="">— not set —</option>{staffApi.data.map((x) => <option key={x.id} value={x.id}>{x.name}{x.designation ? ` (${x.designation})` : ''}</option>)}
+            </Select>
+          </div>
+        )}
         {cart.customer && (
           <div className="mt-2 flex flex-wrap gap-2 text-xs">
             {n(cart.customer.balance) > 0 && <span className="badge bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">Previous due {tk(cart.customer.balance)}</span>}

@@ -5,7 +5,7 @@
 const PREFIX = {
   sale: 'INV', purchase: 'PUR', sale_return: 'SR', purchase_return: 'PR',
   supplier_payment: 'PAY', collection: 'COL', hold: 'HLD',
-  cash_session: 'SHF', stock_adjustment: 'ADJ', stock_count: 'CNT',
+  cash_session: 'SHF', stock_adjustment: 'ADJ', stock_count: 'CNT', purchase_order: 'PO',
 };
 
 async function nextNumber(conn, kind) {

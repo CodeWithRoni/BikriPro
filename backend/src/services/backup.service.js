@@ -18,6 +18,7 @@ const TABLE_ORDER = [
   'supplier_payments', 'customer_collections', 'ledger_adjustments',
   'expenses', 'account_transactions', 'loyalty_transactions', 'sms_logs', 'activity_logs',
   'cash_sessions', 'stock_counts', 'stock_count_items', 'stock_adjustments',
+  'employees', 'purchase_orders', 'purchase_order_items', 'attendance', 'salary_payments', 'employee_advances',
 ];
 
 async function exportAll() {
@@ -90,6 +91,7 @@ const RESET_PLANS = {
   purchases: [
     'DELETE FROM purchase_return_items', 'DELETE FROM purchase_returns', 'DELETE FROM purchase_payments',
     'DELETE FROM purchase_items', 'DELETE FROM supplier_payments',
+    'UPDATE purchases SET po_id = NULL', 'DELETE FROM purchase_order_items', 'DELETE FROM purchase_orders',
     "DELETE FROM account_transactions WHERE ref_type IN ('purchase','purchase_return','supplier_payment')",
     'DELETE FROM purchases',
     "DELETE FROM number_sequences WHERE name IN ('purchase','purchase_return','supplier_payment')",
@@ -106,18 +108,24 @@ const RESET_PLANS = {
   suppliers: [
     "DELETE FROM account_transactions WHERE ref_type = 'supplier_payment'",
     'DELETE FROM supplier_payments', "DELETE FROM ledger_adjustments WHERE party_type = 'supplier'",
-    'UPDATE purchases SET supplier_id = NULL', 'UPDATE purchase_returns SET supplier_id = NULL',
+    'UPDATE purchases SET supplier_id = NULL, po_id = NULL', 'UPDATE purchase_returns SET supplier_id = NULL',
+    'DELETE FROM purchase_order_items', 'DELETE FROM purchase_orders',
     'DELETE FROM supplier_contacts', 'DELETE FROM suppliers',
   ],
   products: [
     'UPDATE sale_items SET variant_id = NULL', 'UPDATE purchase_items SET variant_id = NULL',
     'UPDATE sale_return_items SET variant_id = NULL', 'UPDATE purchase_return_items SET variant_id = NULL',
-    'DELETE FROM stock_adjustments', 'DELETE FROM stock_count_items', 'DELETE FROM stock_counts',
+    'DELETE FROM stock_adjustments', 'DELETE FROM stock_count_items', 'DELETE FROM stock_counts', 'DELETE FROM purchase_order_items',
     'DELETE FROM price_history', 'DELETE FROM product_variants', 'DELETE FROM products',
     "DELETE FROM number_sequences WHERE name IN ('stock_adjustment','stock_count')",
   ],
   expenses: ["DELETE FROM account_transactions WHERE ref_type = 'expense'", 'DELETE FROM expenses'],
   activity_logs: ['DELETE FROM activity_logs'],
+  staff: [
+    "DELETE FROM account_transactions WHERE ref_type = 'staff_advance'",
+    'DELETE FROM employee_advances', 'DELETE FROM salary_payments', 'DELETE FROM attendance',
+    'UPDATE sales SET salesperson_id = NULL', 'DELETE FROM employees',
+  ],
   sms_logs: ['DELETE FROM sms_logs'],
 };
 
@@ -127,7 +135,7 @@ async function resetModules(modules) {
   const bad = modules.filter((m) => !RESET_PLANS[m]);
   if (bad.length) throw Object.assign(new Error(`Unknown module(s): ${bad.join(', ')}`), { status: 400 });
   // Order matters: transactional data before master data.
-  const order = ['sales', 'purchases', 'expenses', 'customers', 'suppliers', 'products', 'sms_logs', 'activity_logs'];
+  const order = ['sales', 'purchases', 'staff', 'expenses', 'customers', 'suppliers', 'products', 'sms_logs', 'activity_logs'];
   const run = order.filter((m) => modules.includes(m));
   await transaction(async (conn) => {
     for (const m of run) for (const sql of RESET_PLANS[m]) await conn.query(sql);

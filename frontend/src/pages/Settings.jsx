@@ -173,7 +173,7 @@ function PinTab({ pinSet, onDone }) {
 const MODULE_LABELS = {
   customers: 'Customers (profiles, collections, loyalty; sales are kept)', sales: 'Sales, returns, held invoices & collections',
   purchases: 'Purchases, purchase returns & supplier payments', suppliers: 'Suppliers & their ledgers', products: 'Products & variants',
-  expenses: 'Expenses', sms_logs: 'SMS log', activity_logs: 'Activity log',
+  expenses: 'Expenses', staff: 'Staff, attendance & salary', sms_logs: 'SMS log', activity_logs: 'Activity log',
 };
 
 function DataTab() {

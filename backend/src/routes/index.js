@@ -17,6 +17,9 @@ import * as reports from '../controllers/reports.controller.js';
 import * as settings from '../controllers/settings.controller.js';
 import * as ops from '../controllers/operations.controller.js';
 import * as offers from '../controllers/offers.controller.js';
+import * as orders from '../controllers/orders.controller.js';
+import * as staff from '../controllers/staff.controller.js';
+import * as insights from '../controllers/insights.controller.js';
 
 const r = express.Router();
 const M = authorize('manager');
@@ -124,6 +127,16 @@ r.post('/purchases/returns', M, purchases.createReturn);
 r.get('/purchases/:id', M, purchases.get);
 r.post('/purchases', M, purchases.create);
 
+// ---------- Purchase orders ----------
+r.get('/purchase-orders/suggestions', M, orders.suggestions);
+r.get('/purchase-orders', M, orders.list);
+r.post('/purchase-orders', M, orders.create);
+r.get('/purchase-orders/:id', M, orders.get);
+r.put('/purchase-orders/:id', M, orders.update);
+r.post('/purchase-orders/:id/status', M, orders.setStatus);
+r.post('/purchase-orders/:id/receive', M, orders.receive);
+r.delete('/purchase-orders/:id', M, orders.remove);
+
 // ---------- Payment (to suppliers) & Collection (from customers) ----------
 r.get('/payments', M, finance.listPayments);
 r.get('/payments/payables', M, finance.payables);
@@ -159,6 +172,25 @@ r.get('/price-manager', M, reports.priceList);
 r.put('/price-manager/bulk', M, reports.priceBulk);
 r.get('/price-manager/history/:variantId', M, reports.priceHistory);
 r.get('/barcode/purchase/:id', reports.barcodeFromPurchase);
+
+// ---------- Smart reports ----------
+r.get('/insights/size-colour', M, insights.sizeColour);
+r.get('/insights/dead-stock', M, insights.deadStock);
+r.get('/insights/heatmap', M, insights.heatmap);
+r.get('/insights/compare', M, insights.compare);
+
+// ---------- Staff ----------
+r.get('/staff/options', staff.options);
+r.get('/staff', M, staff.list);
+r.post('/staff', M, staff.create);
+r.get('/staff/attendance', M, staff.attendance);
+r.put('/staff/attendance', M, staff.saveAttendance);
+r.put('/staff/:id', M, staff.update);
+r.get('/staff/advances', M, staff.listAdvances);
+r.post('/staff/advances', M, staff.giveAdvance);
+r.get('/staff/salary', M, staff.salarySheet);
+r.post('/staff/salary', M, staff.paySalary);
+r.get('/staff/performance', M, staff.performance);
 
 // ---------- Activity Log ----------
 r.get('/activity', M, reports.activity);

@@ -32,6 +32,8 @@ const pages = {
   '/day-closing': lazy(() => import('./pages/DayClosing')),
   '/stock-control': lazy(() => import('./pages/StockControl')),
   '/offers': lazy(() => import('./pages/Offers')),
+  '/staff': lazy(() => import('./pages/Staff')),
+  '/insights': lazy(() => import('./pages/Insights')),
 };
 
 function RequireAuth({ children }) {

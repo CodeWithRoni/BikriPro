@@ -1,24 +1,30 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { PackagePlus, Plus, Trash2, Search, Package, Eye, Phone, History, Wallet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import useApi from '../hooks/useApi';
 import { PartyPicker, ProductPicker, AccountSelect } from '../components/Pickers';
 import ProductForm from '../components/ProductForm';
+import { PurchaseOrders, ReorderSuggestions } from '../components/PurchaseOrders';
 import PartyForm from '../components/PartyForm';
 import { PageHeader, Tabs, Field, Empty, Pagination, Modal, Spinner, Badge, useDebounced } from '../components/ui';
 import FilterBar, { useFilters, toParams, Sum } from '../components/FilterBar';
 import { tk, num, todayStr, monthStart, fmtDate, variantLabel, cls } from '../utils/format';
 
 export default function Purchase() {
-  const [tab, setTab] = useState('new');
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') || 'new';
+  const setTab = (t) => setParams({ tab: t });
   return (
     <div>
       <PageHeader icon={PackagePlus} title="Purchase" subtitle="Receive stock from suppliers"
         actions={<Link to="/products" className="btn-secondary"><Package className="h-4 w-4" /> Products</Link>} />
-      <Tabs tabs={[['new', 'New purchase'], ['list', 'Purchase list']]} value={tab} onChange={setTab} />
-      {tab === 'new' ? <NewPurchase onDone={() => setTab('list')} /> : <PurchaseList />}
+      <Tabs tabs={[['new', 'New purchase'], ['list', 'Purchase list'], ['orders', 'Purchase orders'], ['reorder', 'Re-order suggestions']]} value={tab} onChange={setTab} />
+      {tab === 'new' && <NewPurchase onDone={() => setTab('list')} />}
+      {tab === 'list' && <PurchaseList />}
+      {tab === 'orders' && <PurchaseOrders />}
+      {tab === 'reorder' && <ReorderSuggestions />}
     </div>
   );
 }

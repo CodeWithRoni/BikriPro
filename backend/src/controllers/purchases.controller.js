@@ -14,12 +14,11 @@ import { recordTxn } from '../services/accounts.service.js';
  * Stock goes up, latest cost becomes the variant's purchase price, and an
  * optional new retail/wholesale price can be set straight from the purchase.
  */
-export const create = asyncHandler(async (req, res) => {
-  const b = req.body;
+/** Write one purchase inside an open transaction (also used when a Purchase Order is received). */
+export async function createPurchaseTx(conn, req, b) {
   requireFields(b, ['supplier_id']);
   if (!Array.isArray(b.items) || !b.items.length) throw badRequest('Add at least one item');
-
-  const result = await transaction(async (conn) => {
+  {
     const supplier = await conn.one('SELECT id FROM suppliers WHERE id = ? AND is_active = true', [b.supplier_id]);
     if (!supplier) throw badRequest('Supplier not found');
     const lines = [];
@@ -69,8 +68,13 @@ export const create = asyncHandler(async (req, res) => {
       await conn.query('INSERT INTO purchase_payments (purchase_id, account_id, amount) VALUES (?,?,?)', [id, p.account_id, money(p.amount)]);
       await recordTxn(conn, { accountId: p.account_id, direction: 'out', amount: money(p.amount), refType: 'purchase', refId: id, note: no, date, userId: req.user.id });
     }
+    if (b.po_id) await conn.query('UPDATE purchases SET po_id = ? WHERE id = ?', [b.po_id, id]);
     return { id, invoice_no: no };
-  });
+  }
+}
+
+export const create = asyncHandler(async (req, res) => {
+  const result = await transaction((conn) => createPurchaseTx(conn, req, { ...req.body, po_id: undefined }));
   await logActivity(req, 'purchases', 'create', result.id, result);
   res.status(201).json(await loadPurchase(result.id));
 });
