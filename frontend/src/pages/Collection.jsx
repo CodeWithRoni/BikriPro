@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { HandCoins, Phone, CalendarClock } from 'lucide-react';
+import { HandCoins, Phone, CalendarClock, MessageSquareText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import useApi from '../hooks/useApi';
@@ -43,10 +43,19 @@ export default function Collection() {
   }, [params]);
 
   const pick = (c) => { setCustomer(c); setParams(c ? { customer: c.id } : {}); };
+  const remind = async (c) => {
+    if (c && !c.phone) return toast.error(`${c.name} has no phone number`);
+    if (!c && !window.confirm('Send a due reminder SMS to every customer whose payment date has come?')) return;
+    try {
+      const { data } = await api.post('/settings/sms/due-reminders', c ? { customer_id: c.id } : {});
+      toast.success(data.sent ? `Reminder sent to ${data.sent} customer${data.sent === 1 ? '' : 's'}` : (c ? 'Already reminded today' : 'No reminder needed today'));
+    } catch (e) { toast.error(e.message); }
+  };
 
   return (
     <div>
-      <PageHeader icon={HandCoins} title="Collection" subtitle="Collect dues from credit customers" />
+      <PageHeader icon={HandCoins} title="Collection" subtitle="Collect dues from credit customers"
+        actions={<button type="button" className="btn-secondary" onClick={() => remind(null)}><MessageSquareText className="h-4 w-4" /> Send due reminders</button>} />
       <div className="grid gap-4 xl:grid-cols-[1fr_400px]">
         <div>
           <Tabs tabs={[['due', 'Receivables'], ['history', 'Collection history']]} value={tab} onChange={setTab} />
@@ -72,7 +81,10 @@ export default function Collection() {
                       <td>{r.next_payment_date ? <Badge tone={r.overdue ? 'rose' : 'amber'}><CalendarClock className="h-3 w-3" />{fmtDate(r.next_payment_date)}</Badge> : '—'}</td>
                       <td className="text-slate-500">{fmtDate(r.last_collection)}</td>
                       <td className="text-right font-bold text-rose-600">{tk(r.balance)}</td>
-                      <td><button type="button" className="btn-primary btn-sm" onClick={() => pick(r)}>Collect</button></td>
+                      <td className="whitespace-nowrap text-right">
+                        <button type="button" className="btn-ghost btn-sm" title="Send due reminder SMS" onClick={() => remind(r)}><MessageSquareText className="h-4 w-4" /></button>
+                        <button type="button" className="btn-primary btn-sm" onClick={() => pick(r)}>Collect</button>
+                      </td>
                     </tr>
                   ))}</tbody>
                 </table>

@@ -44,4 +44,4 @@ async function signToken(user) {
   return jwt.sign({ sub: user.id, role: user.role }, await jwtSecret(), { expiresIn: env.jwtExpiresIn });
 }
 
-export { authenticate, authorize, signToken };
+export { authenticate, authorize, signToken, RANK };

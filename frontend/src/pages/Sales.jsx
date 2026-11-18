@@ -5,6 +5,7 @@ import useApi from '../hooks/useApi';
 import { PageHeader, Pagination, Modal, Empty, Badge, useDebounced, PageLoader } from '../components/ui';
 import FilterBar, { useFilters, toParams, Sum, METHODS } from '../components/FilterBar';
 import { Receipt, printNode } from '../components/receipt/Receipt';
+import ShareReceipt from '../components/ShareReceipt';
 import { tk, num, fmtDateTime, fmtDate, monthStart, todayStr, downloadCsv } from '../utils/format';
 
 const INIT = { status: '', pay: '', method: '', account_id: '', customer_id: null, amount: { min: '', max: '' }, walk_in: false };
@@ -56,7 +57,7 @@ export default function Sales() {
             <tbody>
               {data?.data.map((s) => (
                 <tr key={s.id} className="cursor-pointer" onClick={() => open(s.id)}>
-                  <td className="font-semibold text-ocean-700 dark:text-ocean-300">{s.invoice_no}</td>
+                  <td className="font-semibold text-ocean-700 dark:text-ocean-300">{s.invoice_no}{s.exchange_return_id && <div className="text-[11px] font-normal text-amber-600">exchange</div>}</td>
                   <td className="whitespace-nowrap text-slate-500">{fmtDateTime(s.sale_date)}</td>
                   <td>{s.customer_name || 'Walk-in'}<div className="text-xs text-slate-500">{s.customer_phone}</div></td>
                   <td className="text-right">{s.item_count}</td>
@@ -77,7 +78,8 @@ export default function Sales() {
       <Modal open={!!view} onClose={() => setView(null)} title={`Invoice ${view?.invoice_no || ''}`} size="sm"
         footer={<button type="button" className="btn-primary" onClick={() => { setPrintSale(view); printNode(); }}><Printer className="h-4 w-4" /> Print</button>}>
         <div className="flex justify-center rounded-xl bg-slate-100 p-3 dark:bg-slate-800"><div className="bg-white shadow"><Receipt sale={view} /></div></div>
-        {view?.returns?.length > 0 && <p className="mt-3 text-sm text-amber-600">Returns: {view.returns.map((r) => `${r.return_no} (${tk(r.total_amount)})`).join(', ')}</p>}
+        {view?.returns?.length > 0 && <p className="mt-3 text-sm text-amber-600">Returns: {view.returns.map((r) => `${r.return_no} (${tk(r.total_amount)}${r.exchange_credit > 0 ? ', exchanged' : ''})`).join(', ')}</p>}
+        {view && <div className="mt-3"><p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Send receipt</p><ShareReceipt sale={view} compact /></div>}
       </Modal>
       <div className="print-area hidden print:block"><Receipt sale={printSale} /></div>
     </div>

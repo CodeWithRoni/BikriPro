@@ -10,13 +10,14 @@ import { query, transaction } from '../config/db.js';
 // Parent tables first so a restore with FK checks on would also work.
 const TABLE_ORDER = [
   'users', 'settings', 'number_sequences', 'accounts',
-  'categories', 'brands', 'product_attributes', 'products', 'product_variants', 'price_history',
+  'categories', 'brands', 'product_attributes', 'products', 'product_variants', 'price_history', 'offers',
   'customers', 'customer_contacts', 'suppliers', 'supplier_contacts',
   'expense_categories',
   'sales', 'sale_items', 'sale_payments', 'held_invoices', 'sale_returns', 'sale_return_items',
   'purchases', 'purchase_items', 'purchase_payments', 'purchase_returns', 'purchase_return_items',
   'supplier_payments', 'customer_collections', 'ledger_adjustments',
   'expenses', 'account_transactions', 'loyalty_transactions', 'sms_logs', 'activity_logs',
+  'cash_sessions', 'stock_counts', 'stock_count_items', 'stock_adjustments',
 ];
 
 async function exportAll() {
@@ -81,9 +82,10 @@ const RESET_PLANS = {
     'DELETE FROM customer_collections',
     "DELETE FROM account_transactions WHERE ref_type IN ('sale','sale_return','collection')",
     "DELETE FROM ledger_adjustments WHERE party_type='customer' AND ref_type IN ('sale','collection')",
-    'DELETE FROM sales',
+    'UPDATE sale_returns SET exchange_sale_id = NULL', 'UPDATE sales SET exchange_return_id = NULL',
+    'DELETE FROM sales', 'DELETE FROM cash_sessions',
     'UPDATE customers SET loyalty_points = 0, total_purchase = 0',
-    "DELETE FROM number_sequences WHERE name IN ('sale','sale_return','collection','hold')",
+    "DELETE FROM number_sequences WHERE name IN ('sale','sale_return','collection','hold','cash_session')",
   ],
   purchases: [
     'DELETE FROM purchase_return_items', 'DELETE FROM purchase_returns', 'DELETE FROM purchase_payments',
@@ -110,7 +112,9 @@ const RESET_PLANS = {
   products: [
     'UPDATE sale_items SET variant_id = NULL', 'UPDATE purchase_items SET variant_id = NULL',
     'UPDATE sale_return_items SET variant_id = NULL', 'UPDATE purchase_return_items SET variant_id = NULL',
+    'DELETE FROM stock_adjustments', 'DELETE FROM stock_count_items', 'DELETE FROM stock_counts',
     'DELETE FROM price_history', 'DELETE FROM product_variants', 'DELETE FROM products',
+    "DELETE FROM number_sequences WHERE name IN ('stock_adjustment','stock_count')",
   ],
   expenses: ["DELETE FROM account_transactions WHERE ref_type = 'expense'", 'DELETE FROM expenses'],
   activity_logs: ['DELETE FROM activity_logs'],

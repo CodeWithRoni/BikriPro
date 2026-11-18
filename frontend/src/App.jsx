@@ -7,6 +7,7 @@ import { canSee, NAV } from './components/layout/nav';
 import Login from './pages/Login';
 
 const ProductSetup = lazy(() => import('./pages/ProductSetup'));
+const PublicReceipt = lazy(() => import('./pages/PublicReceipt'));
 
 const pages = {
   '/pos': lazy(() => import('./pages/POS')),
@@ -28,6 +29,9 @@ const pages = {
   '/price-manager': lazy(() => import('./pages/PriceManager')),
   '/products': lazy(() => import('./pages/Products')),
   '/expenses': lazy(() => import('./pages/Expenses')),
+  '/day-closing': lazy(() => import('./pages/DayClosing')),
+  '/stock-control': lazy(() => import('./pages/StockControl')),
+  '/offers': lazy(() => import('./pages/Offers')),
 };
 
 function RequireAuth({ children }) {
@@ -40,6 +44,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/r/:token" element={<Suspense fallback={<PageLoader />}><PublicReceipt /></Suspense>} />
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
         <Route index element={<Navigate to="/pos" replace />} />
         {NAV.filter((n) => canSee(role, n.minRole)).map((n) => {

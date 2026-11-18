@@ -30,7 +30,7 @@ export default function SalesReturn() {
   };
 
   const ratio = sale ? sale.grand_total / (sale.items.reduce((s, i) => s + i.line_total, 0) || 1) : 1;
-  const value = sale ? sale.items.reduce((s, i) => s + (Number(qty[i.id]) || 0) * (i.line_total / i.qty) * ratio, 0) : 0;
+  const value = sale ? sale.items.reduce((s, i) => s + Math.round(((i.line_total * ratio * (Number(qty[i.id]) || 0)) / i.qty) * 100) / 100, 0) : 0;
   const suggestedRefund = sale?.customer_id ? Math.max(value - sale.due_amount, 0) : value;
 
   const submit = async () => {

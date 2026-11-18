@@ -10,7 +10,7 @@ import { one } from '../config/db.js';
 import * as backup from '../services/backup.service.js';
 import { saveShopLogo } from '../services/image.service.js';
 import { sendSms } from '../services/sms.service.js';
-import { runBirthdayWishes } from '../services/cron.service.js';
+import { runBirthdayWishes, runDueReminders, runDailyJobs } from '../services/cron.service.js';
 import { asyncHandler, badRequest, forbidden, requireFields } from '../utils/http.js';
 import { logActivity } from '../utils/activity.js';
 
@@ -116,5 +116,10 @@ export const cronBirthdays = asyncHandler(async (req, res) => {
   if (!expected.length || given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
     throw forbidden('Invalid cron secret');
   }
-  res.json(await runBirthdayWishes());
+  res.json(await runDailyJobs()); // birthday wishes + due reminders (the daily pg_cron job calls this)
+});
+
+/** POST /settings/sms/due-reminders { customer_id? } — send due reminders now */
+export const runDueRemindersNow = asyncHandler(async (req, res) => {
+  res.json(await runDueReminders({ force: true, customerId: req.body?.customer_id || null }));
 });

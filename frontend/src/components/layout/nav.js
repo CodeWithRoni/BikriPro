@@ -1,6 +1,6 @@
 import {
   ShoppingCart, LayoutDashboard, Receipt, Undo2, PackagePlus, PackageMinus, Users, Truck,
-  HandCoins, Wallet, Landmark, ReceiptText, Package, TrendingUp, FileBarChart, Settings, History, Barcode, Tags,
+  HandCoins, Wallet, Landmark, ReceiptText, Coins, BadgePercent, ClipboardCheck, Package, TrendingUp, FileBarChart, Settings, History, Barcode, Tags,
 } from 'lucide-react';
 
 /**
@@ -18,7 +18,10 @@ export const NAV = [
   { to: '/suppliers', label: 'Suppliers', icon: Truck, minRole: 'manager' },
   { to: '/payment', label: 'Payment', icon: Wallet, minRole: 'manager' },
   { to: '/collection', label: 'Collection', icon: HandCoins, minRole: 'cashier' },
+  { to: '/day-closing', label: 'Day Closing', icon: Coins, minRole: 'cashier' },
   { to: '/products', label: 'Products', icon: Package, minRole: 'manager' },
+  { to: '/stock-control', label: 'Stock Control', icon: ClipboardCheck, minRole: 'manager' },
+  { to: '/offers', label: 'Offers', icon: BadgePercent, minRole: 'manager' },
   { to: '/accounts', label: 'Cash, Bank & MFS', short: 'Accounts', icon: Landmark, minRole: 'manager' },
   { to: '/expenses', label: 'Expenses', icon: ReceiptText, minRole: 'manager' },
   { to: '/profit', label: 'Profit', icon: TrendingUp, minRole: 'manager' },

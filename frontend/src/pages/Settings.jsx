@@ -78,7 +78,7 @@ function ShopInfo({ s, bind, toggle, save, onLogo }) {
   };
   return (
     <Section icon={Store} title="Shop information (receipts & labels)"
-      onSave={() => save(['shop_name', 'shop_address', 'shop_phone', 'shop_email', 'shop_bin', 'invoice_footer', 'vat_percent', 'receipt_width_mm', 'allow_negative_stock', 'currency_symbol'])}>
+      onSave={() => save(['shop_name', 'shop_address', 'shop_phone', 'shop_email', 'shop_bin', 'invoice_footer', 'vat_percent', 'receipt_width_mm', 'allow_negative_stock', 'currency_symbol', 'shift_required', 'public_app_url'])}>
       <div className="flex items-center gap-4 sm:col-span-2">
         <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700">{s.shop_logo ? <img src={fileUrl(s.shop_logo)} alt="" className="max-h-full max-w-full object-contain" /> : <Store className="h-8 w-8 text-slate-300" />}</div>
         <button type="button" className="btn-secondary" onClick={() => ref.current?.click()}><Upload className="h-4 w-4" /> Upload logo</button>
@@ -93,6 +93,8 @@ function ShopInfo({ s, bind, toggle, save, onLogo }) {
       <Field label="Receipt paper width"><Select className="input" {...bind('receipt_width_mm')}><option value="80">80 mm</option><option value="58">58 mm</option></Select></Field>
       <Field label="Receipt footer" className="sm:col-span-2"><input className="input" {...bind('invoice_footer')} /></Field>
       <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" className="accent-ocean-600" {...toggle('allow_negative_stock')} /> Allow selling when stock is 0 (negative stock)</label>
+      <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" className="accent-ocean-600" {...toggle('shift_required')} /> Cashiers must open a shift (Day Closing) before selling</label>
+      <Field label="Public receipt link address" className="sm:col-span-2" hint="Where receipt links sent by SMS / WhatsApp open. Default: the BikriPro web app on GitHub Pages."><input className="input" placeholder="https://codewithroni.github.io/BikriPro/app/" {...bind('public_app_url')} /></Field>
     </Section>
   );
 }
@@ -103,12 +105,18 @@ function Sms({ s, bind, toggle, save }) {
   const birthdays = async () => { try { const { data } = await api.post('/settings/sms/birthdays'); toast.success(`Birthday wishes sent: ${data.sent ?? 0}`); } catch (e) { toast.error(e.message); } };
   return (
     <Section icon={MessageSquare} title="SMS notifications"
-      onSave={() => save(['sms_on_sale', 'sms_birthday', 'sms_sale_template', 'sms_birthday_template'])}
+      onSave={() => save(['sms_on_sale', 'sms_birthday', 'sms_sale_template', 'sms_birthday_template', 'sms_due_reminder', 'sms_due_repeat_days', 'sms_due_template', 'sms_receipt_template'])}
       extra={<button type="button" className="btn-secondary" onClick={birthdays}><Cake className="h-4 w-4" /> Send today's birthday wishes now</button>}>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-ocean-600" {...toggle('sms_on_sale')} /> SMS customer after every purchase</label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-ocean-600" {...toggle('sms_birthday')} /> Automatic birthday wishes (daily)</label>
       <Field label="Purchase SMS template" className="sm:col-span-2" hint="Placeholders: {name} {shop} {invoice} {total} {paid} {due} {points}"><textarea rows={3} className="input" {...bind('sms_sale_template')} /></Field>
       <Field label="Birthday SMS template" className="sm:col-span-2" hint="Placeholders: {name} {shop}"><textarea rows={2} className="input" {...bind('sms_birthday_template')} /></Field>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-ocean-600" {...toggle('sms_due_reminder')} /> Automatic due reminder on the next payment date</label>
+      <Field label="Repeat for overdue dues every" hint="0 = remind only on the date">
+        <Select className="input" {...bind('sms_due_repeat_days')}><option value="0">Don't repeat</option><option value="1">1 day</option><option value="2">2 days</option><option value="3">3 days</option><option value="7">7 days</option></Select>
+      </Field>
+      <Field label="Due reminder template" className="sm:col-span-2" hint="Placeholders: {name} {shop} {due} {date}"><textarea rows={2} className="input" {...bind('sms_due_template')} /></Field>
+      <Field label="Receipt link SMS template" className="sm:col-span-2" hint="Placeholders: {name} {shop} {invoice} {total} {link}"><textarea rows={2} className="input" {...bind('sms_receipt_template')} /></Field>
       <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300 sm:col-span-2">
         SMS gateway (BulkSMSBD, SSL Wireless, Alpha SMS…) is configured on the server in <code>backend/.env</code> (SMS_PROVIDER, SMS_API_URL, SMS_API_KEY, SMS_SENDER_ID). Until then messages are only logged — see Report Hub → SMS log.
       </div>

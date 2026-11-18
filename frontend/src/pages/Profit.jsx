@@ -14,7 +14,7 @@ const weekStart = (d) => {
   t.setUTCDate(t.getUTCDate() - ((t.getUTCDay() + 6) % 7));
   return t.toISOString().slice(0, 10);
 };
-const KEYS = ['net_sales', 'cogs', 'gross_profit', 'expenses', 'net_profit'];
+const KEYS = ['net_sales', 'cogs', 'gross_profit', 'expenses', 'stock_loss', 'net_profit'];
 
 export default function Profit() {
   const [from, setFrom] = useState(monthStart());
@@ -69,17 +69,17 @@ export default function Profit() {
             <StatCard icon={Boxes} tone="amber" label="Cost of goods" value={tk(s.cogs)} />
             <StatCard icon={TrendingUp} tone="green" label="Gross profit" value={tk(s.gross_profit)} />
             <StatCard icon={Percent} tone="violet" label="Gross margin" value={`${s.margin_percent}%`} />
-            <StatCard icon={Receipt} tone="rose" label="Expenses" value={tk(s.expenses)} />
+            <StatCard icon={Receipt} tone="rose" label="Expenses" value={tk(s.expenses)} sub={s.stock_loss ? `+ stock loss ${tk(s.stock_loss)}` : undefined} />
             <StatCard icon={PiggyBank} tone={s.net_profit >= 0 ? 'green' : 'rose'} label="Net profit" value={tk(s.net_profit)} />
           </div>
           <div className="mt-5 grid gap-4 xl:grid-cols-3">
             <div className="table-wrap xl:col-span-2">
               <table className="table">
-                <thead><tr><th>{{ day: 'Day', week: 'Week', month: 'Month' }[f.group || 'day']}</th><th className="text-right">Net sales</th><th className="text-right">COGS</th><th className="text-right">Gross</th><th className="text-right">Expenses</th><th className="text-right">Net profit</th><th className="w-40" /></tr></thead>
+                <thead><tr><th>{{ day: 'Day', week: 'Week', month: 'Month' }[f.group || 'day']}</th><th className="text-right">Net sales</th><th className="text-right">COGS</th><th className="text-right">Gross</th><th className="text-right">Expenses</th><th className="text-right">Stock loss</th><th className="text-right">Net profit</th><th className="w-40" /></tr></thead>
                 <tbody>{periods.map((d) => (
                   <tr key={d.key}>
                     <td>{label(d.key)}{f.group && f.group !== 'day' && <div className="text-[11px] text-slate-400">{d.days} active day{d.days === 1 ? '' : 's'}</div>}</td><td className="text-right">{tk(d.net_sales)}</td><td className="text-right text-slate-500">{tk(d.cogs)}</td>
-                    <td className="text-right">{tk(d.gross_profit)}</td><td className="text-right text-rose-500">{tk(d.expenses)}</td>
+                    <td className="text-right">{tk(d.gross_profit)}</td><td className="text-right text-rose-500">{tk(d.expenses)}</td><td className="text-right text-rose-500">{d.stock_loss ? tk(d.stock_loss) : '—'}</td>
                     <td className={cls('text-right font-bold', d.net_profit < 0 ? 'text-rose-600' : 'text-emerald-600')}>{tk(d.net_profit)}</td>
                     <td><div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800"><div className={cls('h-2 rounded-full', d.net_profit < 0 ? 'bg-rose-500' : 'bg-emerald-500')} style={{ width: `${(Math.abs(d.net_profit) / max) * 100}%` }} /></div></td>
                   </tr>

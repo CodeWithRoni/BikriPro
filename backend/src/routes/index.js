@@ -15,6 +15,8 @@ import * as purchases from '../controllers/purchases.controller.js';
 import * as finance from '../controllers/finance.controller.js';
 import * as reports from '../controllers/reports.controller.js';
 import * as settings from '../controllers/settings.controller.js';
+import * as ops from '../controllers/operations.controller.js';
+import * as offers from '../controllers/offers.controller.js';
 
 const r = express.Router();
 const M = authorize('manager');
@@ -24,7 +26,9 @@ const A = authorize('admin');
 r.get('/health', (req, res) => res.json({ ok: true, app: 'BikriPro', time: new Date().toISOString() }));
 r.post('/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false }), auth.login);
 r.get('/settings/public', settings.publicSettings);
-r.post('/cron/birthdays', settings.cronBirthdays); // protected by CRON_SECRET header
+r.post('/cron/birthdays', settings.cronBirthdays); // daily jobs, protected by CRON_SECRET header
+r.post('/cron/daily', settings.cronBirthdays);
+r.get('/public/receipt/:token', rateLimit({ windowMs: 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false }), sales.publicReceipt);
 
 // Everything below requires a valid JWT
 r.use(authenticate);
@@ -81,7 +85,36 @@ r.delete('/sales/held/:id', sales.deleteHeld);
 r.get('/sales/returns', sales.listReturns);
 r.get('/sales/returns/:id', sales.getReturn);
 r.post('/sales/returns', M, sales.createReturn);
+r.post('/sales/exchange', M, sales.exchange);
+r.post('/sales/:id/share', sales.share);
+r.post('/sales/:id/sms-receipt', sales.smsReceipt);
 r.get('/sales/:id', sales.get);
+
+// ---------- Day closing (cash drawer shifts) ----------
+r.get('/cash-sessions/current', ops.currentSession);
+r.post('/cash-sessions/open', ops.openSession);
+r.post('/cash-sessions/:id/close', ops.closeSession);
+r.get('/cash-sessions', ops.listSessions);
+r.get('/cash-sessions/:id', ops.getSession);
+
+// ---------- Offers ----------
+r.get('/offers/active', offers.active);
+r.get('/offers', M, offers.list);
+r.post('/offers', M, offers.create);
+r.put('/offers/:id', M, offers.update);
+r.patch('/offers/:id/toggle', M, offers.toggle);
+r.delete('/offers/:id', M, offers.remove);
+
+// ---------- Stock control: damage / lost and stock count ----------
+r.get('/stock-adjustments', M, ops.listAdjustments);
+r.post('/stock-adjustments', M, ops.createAdjustment);
+r.get('/stock-counts', M, ops.listCounts);
+r.post('/stock-counts', M, ops.createCount);
+r.get('/stock-counts/:id', M, ops.getCount);
+r.post('/stock-counts/:id/scan', M, ops.scanCount);
+r.put('/stock-counts/:id/items', M, ops.setCountItem);
+r.post('/stock-counts/:id/apply', M, ops.applyCount);
+r.post('/stock-counts/:id/cancel', M, ops.cancelCount);
 
 // ---------- Purchases ----------
 r.get('/purchases', M, purchases.list);
@@ -141,5 +174,6 @@ r.get('/settings/reset/modules', A, settings.resetModules);
 r.post('/settings/reset', A, settings.resetDb);
 r.post('/settings/sms/test', A, settings.testSms);
 r.post('/settings/sms/birthdays', A, settings.runBirthdays);
+r.post('/settings/sms/due-reminders', M, settings.runDueRemindersNow);
 
 export default r;

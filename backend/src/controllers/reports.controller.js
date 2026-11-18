@@ -80,11 +80,12 @@ export const profit = asyncHandler(async (req, res) => {
     `SELECT d.day,
         COALESCE(s.revenue,0) AS revenue, COALESCE(s.cogs,0) AS cogs,
         COALESCE(r.ret_value,0) AS returns_value, COALESCE(r.ret_cost,0) AS returns_cost,
-        COALESCE(e.expenses,0) AS expenses
+        COALESCE(e.expenses,0) AS expenses, COALESCE(sa.stock_value,0) AS stock_adjust
      FROM (
        SELECT DATE(sale_date) AS day FROM sales WHERE DATE(sale_date) BETWEEN ? AND ?
        UNION SELECT DATE(return_date) FROM sale_returns WHERE DATE(return_date) BETWEEN ? AND ?
        UNION SELECT expense_date FROM expenses WHERE expense_date BETWEEN ? AND ?
+       UNION SELECT adj_date FROM stock_adjustments WHERE adj_date BETWEEN ? AND ?
      ) d
      LEFT JOIN (SELECT DATE(sale_date) AS day, SUM(grand_total) AS revenue, SUM(cost_total) AS cogs FROM sales
                 WHERE status <> 'cancelled' AND DATE(sale_date) BETWEEN ? AND ? GROUP BY DATE(sale_date)) s ON s.day = d.day
@@ -92,17 +93,20 @@ export const profit = asyncHandler(async (req, res) => {
                 WHERE DATE(return_date) BETWEEN ? AND ? GROUP BY DATE(return_date)) r ON r.day = d.day
      LEFT JOIN (SELECT expense_date AS day, SUM(amount) AS expenses FROM expenses
                 WHERE expense_date BETWEEN ? AND ? GROUP BY expense_date) e ON e.day = d.day
+     LEFT JOIN (SELECT adj_date AS day, SUM(value) AS stock_value FROM stock_adjustments
+                WHERE adj_date BETWEEN ? AND ? GROUP BY adj_date) sa ON sa.day = d.day
      ORDER BY d.day`,
-    [from, to, from, to, from, to, from, to, from, to, from, to]);
+    [from, to, from, to, from, to, from, to, from, to, from, to, from, to, from, to]);
   const rows = daily.map((d) => {
     const netSales = money(d.revenue - d.returns_value);
     const cogs = money(d.cogs - d.returns_cost);
     const gross = money(netSales - cogs);
-    return { day: d.day, net_sales: netSales, cogs, gross_profit: gross, expenses: money(d.expenses), net_profit: money(gross - d.expenses) };
+    const stockLoss = money(-d.stock_adjust); // damage / lost / count shortfall (minus = stock found)
+    return { day: d.day, net_sales: netSales, cogs, gross_profit: gross, expenses: money(d.expenses), stock_loss: stockLoss, net_profit: money(gross - d.expenses - stockLoss) };
   });
   const sum = (k) => money(rows.reduce((t, r) => t + r[k], 0));
   const summary = {
-    net_sales: sum('net_sales'), cogs: sum('cogs'), gross_profit: sum('gross_profit'), expenses: sum('expenses'), net_profit: sum('net_profit'),
+    net_sales: sum('net_sales'), cogs: sum('cogs'), gross_profit: sum('gross_profit'), expenses: sum('expenses'), stock_loss: sum('stock_loss'), net_profit: sum('net_profit'),
   };
   summary.margin_percent = summary.net_sales ? money((summary.gross_profit / summary.net_sales) * 100) : 0;
   const byCategory = await query(

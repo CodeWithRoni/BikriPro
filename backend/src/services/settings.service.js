@@ -24,6 +24,11 @@ const DEFAULTS = {
   sms_sale_template: 'Dear {name}, thanks for shopping at {shop}. Invoice {invoice}, Total {total} Tk, Paid {paid} Tk, Due {due} Tk. Points: {points}',
   sms_birthday_template: 'Happy Birthday {name}! 🎉 Wishing you a wonderful year from all of us at {shop}.',
   sms_due_template: 'Dear {name}, a friendly reminder from {shop}: your due of {due} Tk was scheduled for {date}.',
+  sms_due_reminder: '1',             // auto SMS on the next payment date
+  sms_due_repeat_days: '3',          // repeat for overdue dues every N days (0 = only on the date)
+  sms_receipt_template: 'Dear {name}, thanks for shopping at {shop}. Invoice {invoice}, Total {total} Tk. View receipt: {link}',
+  public_app_url: 'https://codewithroni.github.io/BikriPro/app/', // where shared receipt links open
+  shift_required: '0',               // 1 = cashier must open a shift before selling
 };
 
 // Keys never sent to the client

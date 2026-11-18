@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { query, one, transaction } from '../config/db.js';
 import { addRange, orderBy } from '../utils/filters.js';
 import { asyncHandler, requireFields, badRequest, notFound, paging, money, today } from '../utils/http.js';
@@ -7,7 +8,7 @@ import { adjustStock } from '../services/stock.service.js';
 import { recordTxn, methodFor } from '../services/accounts.service.js';
 import * as loyalty from '../services/loyalty.service.js';
 import * as settings from '../services/settings.service.js';
-import { sendSaleSms } from '../services/sms.service.js';
+import { sendSaleSms, sendSms, render } from '../services/sms.service.js';
 
 /**
  * POST /sales — complete a POS invoice.
@@ -19,14 +20,18 @@ import { sendSaleSms } from '../services/sms.service.js';
  *   note?, send_sms? (default true), hold_id? (removes the held cart)
  * }
  */
-export const create = asyncHandler(async (req, res) => {
-  const b = req.body;
+const newToken = () => crypto.randomBytes(12).toString('base64url');
+
+/**
+ * Write one sale inside an open transaction. `exchange` = { credit, returnId } when the sale
+ * is the "new items" half of an exchange: the returned goods' value pays for it first.
+ */
+async function createSaleTx(conn, req, b, { exchange = null } = {}) {
   if (!Array.isArray(b.items) || !b.items.length) throw badRequest('Cart is empty');
   const cfg = await loyalty.getConfig();
   const s = await settings.getAll();
   const vatPercent = Number(s.vat_percent) || 0;
-
-  const result = await transaction(async (conn) => {
+  {
     // ---- customer ----
     let customer = null;
     if (b.customer_id) {
@@ -52,7 +57,8 @@ export const create = asyncHandler(async (req, res) => {
       const discount = money(it.discount || 0);
       const lineTotal = money(qty * unitPrice - discount);
       if (lineTotal < 0) throw badRequest(`Discount on ${v.product_name} is larger than its price`);
-      lines.push({ v, qty, unitPrice, discount, lineTotal, label: [v.size, v.color].filter(Boolean).join(' / ') || null });
+      const offerDiscount = it.offer_id ? Math.min(money(it.offer_discount || 0), discount) : 0;
+      lines.push({ v, qty, unitPrice, discount, lineTotal, offerId: offerDiscount > 0 ? it.offer_id : null, offerDiscount, label: [v.size, v.color].filter(Boolean).join(' / ') || null });
     }
     const subtotal = money(lines.reduce((t, l) => t + l.qty * l.unitPrice, 0));
     const itemDiscount = money(lines.reduce((t, l) => t + l.discount, 0));
@@ -86,8 +92,11 @@ export const create = asyncHandler(async (req, res) => {
       accounts[p.account_id] = acc;
     }
     const tendered = money(payments.reduce((t, p) => t + Number(p.amount), 0));
-    const paid = Math.min(tendered, grandTotal);
-    const change = money(tendered - paid);
+    const credit = exchange ? Math.min(money(exchange.credit), grandTotal) : 0; // returned goods pay first
+    const payable = money(grandTotal - credit);
+    const cashPaid = Math.min(tendered, payable);
+    const paid = money(credit + cashPaid);
+    const change = money(tendered - cashPaid);
     const due = money(grandTotal - paid);
     if (change > 0) {
       const cashPay = [...payments].reverse().find((p) => accounts[p.account_id].type === 'cash');
@@ -101,20 +110,24 @@ export const create = asyncHandler(async (req, res) => {
     // ---- write invoice ----
     const invoiceNo = await nextNumber(conn, 'sale');
     const costTotal = money(lines.reduce((t, l) => t + l.qty * Number(l.v.purchase_price), 0));
+    const billOfferDiscount = b.bill_offer_id ? Math.min(money(b.bill_offer_discount || 0), invoiceDiscount) : 0;
+    const offerDiscount = money(lines.reduce((t, l) => t + l.offerDiscount, 0) + billOfferDiscount);
     const r = await conn.q(
       `INSERT INTO sales (invoice_no, customer_id, user_id, subtotal, item_discount, invoice_discount, vat_amount, round_off,
-        points_redeemed, points_value, grand_total, paid_amount, change_amount, due_amount, next_payment_date, cost_total, note)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        points_redeemed, points_value, grand_total, paid_amount, change_amount, due_amount, next_payment_date, cost_total, note,
+        bill_offer_id, offer_discount, exchange_credit, exchange_return_id, public_token)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [invoiceNo, customer?.id || null, req.user.id, subtotal, itemDiscount, invoiceDiscount, vat, roundOff,
-        pointsRedeemed, pointsValue, grandTotal, paid, change, due, due > 0 ? b.next_payment_date : null, costTotal, b.note || null]
+        pointsRedeemed, pointsValue, grandTotal, paid, change, due, due > 0 ? b.next_payment_date : null, costTotal, b.note || null,
+        billOfferDiscount > 0 ? b.bill_offer_id : null, offerDiscount, credit, exchange?.returnId || null, newToken()]
     );
     const saleId = r.insertId;
 
     for (const l of lines) {
       await conn.query(
-        `INSERT INTO sale_items (sale_id, variant_id, product_name, variant_label, qty, unit_price, cost_price, discount, line_total)
-         VALUES (?,?,?,?,?,?,?,?,?)`,
-        [saleId, l.v.id, l.v.product_name, l.label, l.qty, l.unitPrice, l.v.purchase_price, l.discount, l.lineTotal]);
+        `INSERT INTO sale_items (sale_id, variant_id, product_name, variant_label, qty, unit_price, cost_price, discount, line_total, offer_id, offer_discount)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        [saleId, l.v.id, l.v.product_name, l.label, l.qty, l.unitPrice, l.v.purchase_price, l.discount, l.lineTotal, l.offerId, l.offerDiscount]);
       await adjustStock(conn, l.v.id, -l.qty);
     }
 
@@ -144,9 +157,13 @@ export const create = asyncHandler(async (req, res) => {
     }
 
     if (b.hold_id) await conn.query('DELETE FROM held_invoices WHERE id = ?', [b.hold_id]);
-    return { saleId, invoiceNo };
-  });
+    return { saleId, invoiceNo, grandTotal, credit };
+  }
+}
 
+export const create = asyncHandler(async (req, res) => {
+  const b = req.body;
+  const result = await transaction((conn) => createSaleTx(conn, req, b));
   await logActivity(req, 'sales', 'create', result.saleId, { invoice: result.invoiceNo });
   const sale = await loadSale(result.saleId);
 
@@ -167,7 +184,16 @@ async function loadSale(id) {
   sale.customer = sale.customer_id
     ? await one('SELECT c.id, c.name, c.phone, c.address, c.loyalty_points, c.is_walk_in, ROUND(b.balance,2) AS balance FROM customers c JOIN v_customer_balance b ON b.customer_id = c.id WHERE c.id = ?', [sale.customer_id])
     : null;
-  sale.returns = await query('SELECT id, return_no, return_date, total_amount, refund_amount FROM sale_returns WHERE sale_id = ?', [id]);
+  sale.returns = await query('SELECT id, return_no, return_date, total_amount, refund_amount, exchange_credit FROM sale_returns WHERE sale_id = ?', [id]);
+  if (sale.exchange_return_id) {
+    const r = await one('SELECT r.id, r.return_no, r.total_amount, r.refund_amount, r.exchange_credit, s.invoice_no FROM sale_returns r JOIN sales s ON s.id = r.sale_id WHERE r.id = ?', [sale.exchange_return_id]);
+    if (r) {
+      r.items = await query(`SELECT ri.qty, ri.unit_price, ri.line_total, si.product_name, si.variant_label FROM sale_return_items ri
+        JOIN sale_items si ON si.id = ri.sale_item_id WHERE ri.sale_return_id = ?`, [r.id]);
+      r.cash_refund = money(Number(r.total_amount) - Number(sale.exchange_credit));
+      sale.exchange = r;
+    }
+  }
   return sale;
 }
 
@@ -201,7 +227,7 @@ export const list = asyncHandler(async (req, res) => {
   const order = orderBy(qs.sort, { oldest: 's.id ASC', amount_desc: 's.grand_total DESC, s.id DESC', amount_asc: 's.grand_total ASC, s.id DESC', due_desc: 's.due_amount DESC, s.id DESC' }, 's.id DESC');
   const [sum] = await query(`SELECT COUNT(*) AS total, COALESCE(SUM(s.grand_total),0) AS amount, COALESCE(SUM(s.paid_amount),0) AS paid, COALESCE(SUM(s.due_amount),0) AS due ${base}`, params);
   const rows = await query(
-    `SELECT s.id, s.invoice_no, s.sale_date, s.grand_total, s.paid_amount, s.due_amount, s.next_payment_date, s.status,
+    `SELECT s.id, s.invoice_no, s.sale_date, s.grand_total, s.paid_amount, s.due_amount, s.next_payment_date, s.status, s.exchange_return_id, s.offer_discount,
             c.name AS customer_name, c.phone AS customer_phone, u.name AS cashier,
             (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) AS item_count
      ${base} ORDER BY ${order} LIMIT ? OFFSET ?`, [...params, limit, offset]);
@@ -247,10 +273,14 @@ export const deleteHeld = asyncHandler(async (req, res) => {
  * POST /sales/returns { sale_id, items: [{ sale_item_id, qty, restock? }], refund_amount?, account_id?, reason? }
  * The part not refunded in cash reduces the customer's due/balance.
  */
-export const createReturn = asyncHandler(async (req, res) => {
-  requireFields(req.body, ['sale_id', 'items']);
-  const b = req.body;
-  const result = await transaction(async (conn) => {
+/**
+ * Write one sales return inside an open transaction.
+ * `exchange` = true: nothing is paid out here; the whole value becomes exchange credit
+ * (recorded in refund_amount + exchange_credit so the customer's balance is unchanged)
+ * and the caller uses it on the new sale.
+ */
+async function returnTx(conn, req, b, { exchange = false } = {}) {
+  {
     const sale = await conn.one('SELECT * FROM sales WHERE id = ? FOR UPDATE', [b.sale_id]);
     if (!sale) throw notFound('Invoice not found');
     const items = await conn.q('SELECT * FROM sale_items WHERE sale_id = ?', [sale.id]);
@@ -266,17 +296,18 @@ export const createReturn = asyncHandler(async (req, res) => {
       const it = items.find((i) => i.id === Number(r.sale_item_id));
       if (!it) throw badRequest('Item does not belong to this invoice');
       if (qty > Number(it.qty) - Number(it.returned_qty)) throw badRequest(`Cannot return more than sold for ${it.product_name}`);
-      const unit = money((Number(it.line_total) / Number(it.qty)) * ratio);
-      const lineTotal = money(unit * qty);
+      // Round once on the whole line (rounding the unit first can drift by a paisa: 666.67 × 3 = 2000.01)
+      const lineTotal = money((Number(it.line_total) * ratio * qty) / Number(it.qty));
+      const unit = money(lineTotal / qty);
       total += lineTotal;
       cost += qty * Number(it.cost_price);
       lines.push({ it, qty, unit, lineTotal, restock: r.restock !== false });
     }
     if (!lines.length) throw badRequest('Select at least one item to return');
     total = money(total);
-    const refund = money(b.refund_amount ?? (sale.customer_id ? Math.max(total - Number(sale.due_amount), 0) : total));
+    const refund = exchange ? 0 : money(b.refund_amount ?? (sale.customer_id ? Math.max(total - Number(sale.due_amount), 0) : total));
     if (refund > total) throw badRequest('Refund cannot exceed return value');
-    if (!sale.customer_id && refund !== total) throw badRequest('Walk-in returns must be fully refunded');
+    if (!exchange && !sale.customer_id && refund !== total) throw badRequest('Walk-in returns must be fully refunded');
     let accountId = b.account_id;
     if (refund > 0 && !accountId) {
       accountId = (await conn.one("SELECT id FROM accounts WHERE type='cash' AND is_active=true ORDER BY is_default DESC, id LIMIT 1"))?.id;
@@ -285,8 +316,8 @@ export const createReturn = asyncHandler(async (req, res) => {
 
     const no = await nextNumber(conn, 'sale_return');
     const ins = await conn.q(
-      'INSERT INTO sale_returns (return_no, sale_id, customer_id, total_amount, cost_total, refund_amount, account_id, reason, user_id) VALUES (?,?,?,?,?,?,?,?,?)',
-      [no, sale.id, sale.customer_id, total, money(cost), refund, refund > 0 ? accountId : null, b.reason || null, req.user.id]);
+      'INSERT INTO sale_returns (return_no, sale_id, customer_id, total_amount, cost_total, refund_amount, exchange_credit, account_id, reason, user_id) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      [no, sale.id, sale.customer_id, total, money(cost), exchange ? total : refund, exchange ? total : 0, refund > 0 ? accountId : null, b.reason || (exchange ? 'Exchange' : null), req.user.id]);
     for (const l of lines) {
       await conn.query('INSERT INTO sale_return_items (sale_return_id, sale_item_id, variant_id, qty, unit_price, line_total, restock) VALUES (?,?,?,?,?,?,?)',
         [ins.insertId, l.it.id, l.it.variant_id, l.qty, l.unit, l.lineTotal, l.restock ? 1 : 0]);
@@ -294,7 +325,7 @@ export const createReturn = asyncHandler(async (req, res) => {
       if (l.restock && l.it.variant_id) await adjustStock(conn, l.it.variant_id, l.qty, { allowNegative: true });
     }
     // Non-refunded value settles this invoice's due first
-    const settle = Math.min(money(total - refund), Number(sale.due_amount));
+    const settle = exchange ? 0 : Math.min(money(total - refund), Number(sale.due_amount));
     const allReturned = (await conn.one('SELECT SUM(qty - returned_qty) AS left_qty FROM sale_items WHERE sale_id = ?', [sale.id])).left_qty <= 0;
     await conn.query('UPDATE sales SET due_amount = due_amount - ?, status = ? WHERE id = ?', [settle, allReturned ? 'returned' : 'partial_return', sale.id]);
     if (refund > 0) await recordTxn(conn, { accountId, direction: 'out', amount: refund, refType: 'sale_return', refId: ins.insertId, note: `${no} for ${sale.invoice_no}`, date: today(), userId: req.user.id });
@@ -306,8 +337,14 @@ export const createReturn = asyncHandler(async (req, res) => {
       if (rev > 0) await loyalty.applyPoints(conn, { customerId: sale.customer_id, saleId: sale.id, type: 'reverse', points: -rev, note: `Reversed by ${no}` });
       await conn.query('UPDATE customers SET total_purchase = GREATEST(total_purchase - ?, 0) WHERE id = ?', [total, sale.customer_id]);
     }
-    return { id: ins.insertId, return_no: no, total, refund };
-  });
+    return { id: ins.insertId, return_no: no, total, refund, sale };
+  }
+}
+
+export const createReturn = asyncHandler(async (req, res) => {
+  requireFields(req.body, ['sale_id', 'items']);
+  const b = req.body;
+  const { sale: _s, ...result } = await transaction((conn) => returnTx(conn, req, b));
   await logActivity(req, 'sales_return', 'create', result.id, result);
   res.status(201).json(result);
 });
@@ -341,3 +378,86 @@ export const getReturn = asyncHandler(async (req, res) => {
 });
 
 export { loadSale as loadSale };
+
+// ---------- Exchange ----------
+/**
+ * POST /sales/exchange
+ * { sale_id, return_items: [{ sale_item_id, qty, restock? }], items: [...new items like POST /sales],
+ *   payments?, invoice_discount?, round_off?, customer_id?, next_payment_date?, reason?,
+ *   leftover?: 'cash' | 'credit', refund_account_id? }
+ * One receipt: the returned goods' value pays for the new items. The customer pays the
+ * difference, or gets the leftover back in cash (or kept as credit on their account).
+ */
+export const exchange = asyncHandler(async (req, res) => {
+  requireFields(req.body, ['sale_id', 'return_items', 'items']);
+  const b = req.body;
+  const result = await transaction(async (conn) => {
+    const ret = await returnTx(conn, req, { sale_id: b.sale_id, items: b.return_items, reason: b.reason || 'Exchange' }, { exchange: true });
+    const customerId = b.customer_id || ret.sale.customer_id || null;
+    const sale = await createSaleTx(conn, req, { ...b, customer_id: customerId }, { exchange: { credit: ret.total, returnId: ret.id } });
+    const leftover = money(ret.total - sale.credit);
+    let refundAmount = ret.total; // fully settled: credit used + cash back
+    let accountId = null;
+    if (leftover > 0) {
+      const keepCredit = b.leftover === 'credit';
+      if (keepCredit) {
+        const c = customerId ? await conn.one('SELECT is_walk_in FROM customers WHERE id = ?', [customerId]) : null;
+        if (!c || c.is_walk_in) throw badRequest('Keeping the balance as credit needs a registered customer');
+        refundAmount = sale.credit; // the rest stays on the customer's account as advance
+      } else {
+        accountId = b.refund_account_id || (await conn.one("SELECT id FROM accounts WHERE type='cash' AND is_active ORDER BY is_default DESC, id LIMIT 1"))?.id;
+        if (!accountId) throw badRequest('Choose the account the difference is paid back from');
+        await recordTxn(conn, { accountId, direction: 'out', amount: leftover, refType: 'sale_return', refId: ret.id, note: `${ret.return_no} exchange balance`, date: today(), userId: req.user.id });
+      }
+    }
+    await conn.query('UPDATE sale_returns SET exchange_sale_id = ?, exchange_credit = ?, refund_amount = ?, account_id = ? WHERE id = ?',
+      [sale.saleId, sale.credit, refundAmount, accountId, ret.id]);
+    return { saleId: sale.saleId, invoiceNo: sale.invoiceNo, returnNo: ret.return_no, leftover };
+  });
+  await logActivity(req, 'sales', 'exchange', result.saleId, { invoice: result.invoiceNo, return: result.returnNo });
+  const sale = await loadSale(result.saleId);
+  if (b.send_sms !== false && sale.customer) sendSaleSms(sale, sale.customer).catch((e) => console.error('[sms]', e.message));
+  res.status(201).json({ ...sale, exchange_leftover: result.leftover });
+});
+
+// ---------- Shareable receipt ----------
+/** POST /sales/:id/share — make sure the invoice has a public link token */
+export const share = asyncHandler(async (req, res) => {
+  let row = await one('SELECT id, public_token FROM sales WHERE id = ?', [req.params.id]);
+  if (!row) throw notFound('Invoice not found');
+  if (!row.public_token) row = await one('UPDATE sales SET public_token = ? WHERE id = ? RETURNING id, public_token', [newToken(), row.id]);
+  res.json({ token: row.public_token });
+});
+
+/** GET /public/receipt/:token — no login. Only what is printed on the paper receipt. */
+export const publicReceipt = asyncHandler(async (req, res) => {
+  const token = String(req.params.token || '');
+  if (!/^[A-Za-z0-9_-]{12,40}$/.test(token)) throw notFound('Receipt not found');
+  const row = await one('SELECT id FROM sales WHERE public_token = ?', [token]);
+  if (!row) throw notFound('Receipt not found');
+  const sale = await loadSale(row.id);
+  const st = await settings.getAll();
+  delete sale.public_token;
+  if (sale.customer) sale.customer = { name: sale.customer.name, is_walk_in: sale.customer.is_walk_in, loyalty_points: sale.customer.loyalty_points };
+  sale.payments = sale.payments.map((p) => ({ method: p.method, amount: p.amount, account_name: p.account_name }));
+  res.json({
+    sale,
+    shop: {
+      shop_name: st.shop_name, shop_address: st.shop_address, shop_phone: st.shop_phone, shop_logo: st.shop_logo,
+      shop_bin: st.shop_bin, invoice_footer: st.invoice_footer, currency_symbol: st.currency_symbol, receipt_width_mm: st.receipt_width_mm,
+    },
+  });
+});
+
+/** POST /sales/:id/sms-receipt { link } — SMS the receipt link to the customer */
+export const smsReceipt = asyncHandler(async (req, res) => {
+  const sale = await loadSale(req.params.id);
+  if (!sale) throw notFound('Invoice not found');
+  const phone = req.body?.phone || sale.customer?.phone;
+  if (!phone) throw badRequest('This customer has no phone number');
+  const st = await settings.getAll();
+  const message = render(st.sms_receipt_template, { name: sale.customer?.name || 'Customer', shop: st.shop_name, invoice: sale.invoice_no, total: sale.grand_total, link: req.body?.link || '' });
+  const r = await sendSms({ phone, message, purpose: 'receipt', customerId: sale.customer?.id || null });
+  if (r.status === 'failed' || r.status === 'skipped') throw badRequest(r.error || 'SMS could not be sent');
+  res.json(r);
+});
