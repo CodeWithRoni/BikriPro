@@ -24,8 +24,8 @@ const pages = {
   '/activity': lazy(() => import('./pages/ActivityLog')),
   '/barcode': lazy(() => import('./pages/BarcodeLabels')),
   '/price-manager': lazy(() => import('./pages/PriceManager')),
+  '/products': lazy(() => import('./pages/Products')),
 };
-const Products = lazy(() => import('./pages/Products'));
 
 function RequireAuth({ children }) {
   const token = useSelector((s) => s.auth.token);
@@ -43,7 +43,6 @@ export default function App() {
           const Page = pages[n.to];
           return <Route key={n.to} path={`${n.to}/*`} element={<Suspense fallback={<PageLoader />}><Page /></Suspense>} />;
         })}
-        {canSee(role, 'manager') && <Route path="/products/*" element={<Suspense fallback={<PageLoader />}><Products /></Suspense>} />}
         <Route path="*" element={<Navigate to="/pos" replace />} />
       </Route>
     </Routes>

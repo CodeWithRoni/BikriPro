@@ -56,7 +56,7 @@ export default function AppLayout() {
           <button type="button" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 lg:hidden" onClick={() => dispatch(setMobileNav(true))} aria-label="Open menu">
             <Menu className="h-5 w-5" />
           </button>
-          <h2 className="truncate text-base font-bold text-slate-800 dark:text-white">{current?.label || (pathname.startsWith('/products') ? 'Products' : 'BikriPro')}</h2>
+          <h2 className="truncate text-base font-bold text-slate-800 dark:text-white">{current?.label || 'BikriPro'}</h2>
           <div className="ml-auto flex items-center gap-1.5" ref={menuRef}>
             <div className="relative">
               <button type="button" onClick={() => { setBell(!bell); setMenu(false); }} className="relative rounded-xl p-2.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" aria-label="Notifications">

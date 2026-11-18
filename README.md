@@ -54,11 +54,12 @@ Single-port production run (API also serves the built web app): `npm start` → 
 5. **Purchase** (stock in, latest cost, set new MRP from the purchase) · 6. **Purchase Return**
 7. **Customers** · 8. **Suppliers** — separate menus, dynamic “Add another” contact fields, optional DOB, ledgers filterable by date / transaction type / area, ledger adjustments (customer round-off waivers, supplier rebates & commissions)
 9. **Payment** (to suppliers) · 10. **Collection** (from credit customers, with waiver & rescheduling)
-11. **Cash, Bank & MFS Setup** — accounts, statements, transfers, deposits/withdrawals, expenses
-12. **Profit** — net sales, COGS, gross margin, expenses, net profit, by category
-13. **Report Hub** — 11 reports, CSV export, print
-14. **Shop Setup / Admin** — shop info & logo, VAT, receipt width, loyalty rates, SMS templates, users & roles, security PIN, **database Export / Import / Reset** (PIN + typed confirmation)
-15. **Activity Log** · 16. **Barcode Labels** (load from the last 10 purchases, choose label fields, A4 sheets or thermal presets / custom mm, live preview) · 17. **Price Manager** (unpriced / missing retail / missing wholesale / below-cost filters, inline edit, bulk markup rules)
+11. **Products** — catalogue, size/colour variants, SKU & barcode, photos (auto 500×500), low-stock filter
+12. **Cash, Bank & MFS Setup** — accounts, statements, transfers, deposits/withdrawals, expenses
+13. **Profit** — net sales, COGS, gross margin, expenses, net profit, by category
+14. **Report Hub** — 11 reports, CSV export, print
+15. **Shop Setup / Admin** — shop info & logo, VAT, receipt width, loyalty rates, SMS templates, users & roles, security PIN, **database Export / Import / Reset** (PIN + typed confirmation)
+16. **Activity Log** · 17. **Barcode Labels** (load from the last 10 purchases, choose label fields, A4 sheets or thermal presets / custom mm, live preview) · 18. **Price Manager** (unpriced / missing retail / missing wholesale / below-cost filters, inline edit, bulk markup rules)
 
 Product images of any size are automatically converted on the server to a **500 × 500 WebP** — trimmed, fitted without cropping or stretching, and compressed (typically 2–40 KB).
 
