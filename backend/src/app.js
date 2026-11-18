@@ -37,8 +37,8 @@ if (!isEdge) {
 app.use('/api', routes);
 
 // Optionally serve the built React app from the same server (single-port install)
-const webDist = process.env.WEB_DIST || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../frontend/dist');
-if (!isEdge && fs.existsSync(path.join(webDist, 'index.html'))) {
+const webDist = isEdge ? null : process.env.WEB_DIST || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../frontend/dist');
+if (webDist && fs.existsSync(path.join(webDist, 'index.html'))) {
   app.use(express.static(webDist));
   app.get(/^\/(?!api|uploads).*/, (req, res) => res.sendFile(path.join(webDist, 'index.html')));
 }

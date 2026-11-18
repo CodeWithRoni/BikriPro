@@ -3,7 +3,8 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+// import.meta.url is not a file:// URL when the bundle is loaded remotely on the edge
+const here = (() => { try { return path.dirname(fileURLToPath(import.meta.url)); } catch { return '/'; } })();
 // Supabase Edge Functions run on Deno with a read-only FS and no .env file
 export const isEdge = typeof globalThis.Deno !== 'undefined' && Boolean(process.env.SB_EXECUTION_ID || process.env.SUPABASE_URL);
 if (!isEdge) dotenv.config({ path: path.resolve(here, '../../.env') });
