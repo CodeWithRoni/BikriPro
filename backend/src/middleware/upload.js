@@ -1,5 +1,5 @@
-const multer = require('multer');
-const { badRequest } = require('../utils/http');
+import multer from 'multer';
+import { badRequest } from '../utils/http.js';
 
 // Keep uploads in memory: Sharp processes the buffer, only the optimised
 // 500x500 result is written to disk.
@@ -20,4 +20,4 @@ const backupUpload = multer({
   limits: { fileSize: 200 * 1024 * 1024, files: 1 },
 });
 
-module.exports = { imageUpload, backupUpload };
+export { imageUpload, backupUpload };

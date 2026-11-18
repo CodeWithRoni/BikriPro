@@ -1,24 +1,24 @@
 /**
  * Cash, Bank & MFS accounts · Supplier Payments · Customer Collections · Expenses
  */
-const { query, one, transaction } = require('../config/db');
-const { asyncHandler, requireFields, badRequest, notFound, paging, money, today } = require('../utils/http');
-const { logActivity } = require('../utils/activity');
-const { nextNumber } = require('../utils/numbering');
-const { recordTxn } = require('../services/accounts.service');
-const { allocateFifo } = require('./parties.controller');
+import { query, one, transaction } from '../config/db.js';
+import { asyncHandler, requireFields, badRequest, notFound, paging, money, today } from '../utils/http.js';
+import { logActivity } from '../utils/activity.js';
+import { nextNumber } from '../utils/numbering.js';
+import { recordTxn } from '../services/accounts.service.js';
+import { allocateFifo } from './parties.controller.js';
 
 const BALANCE_SQL = `a.opening_balance
   + COALESCE((SELECT SUM(CASE WHEN t.direction='in' THEN t.amount ELSE -t.amount END) FROM account_transactions t WHERE t.account_id = a.id), 0)`;
 
 // ---------- Accounts ----------
-exports.listAccounts = asyncHandler(async (req, res) => {
+export const listAccounts = asyncHandler(async (req, res) => {
   const rows = await query(`SELECT a.*, ROUND(${BALANCE_SQL}, 2) AS balance FROM accounts a ORDER BY a.is_active DESC, array_position(ARRAY['cash','mfs','bank','card'], a.type), a.name`);
   const totals = rows.filter((r) => r.is_active).reduce((t, r) => { t[r.type] = money((t[r.type] || 0) + r.balance); t.all = money((t.all || 0) + r.balance); return t; }, {});
   res.json({ data: rows, totals });
 });
 
-exports.createAccount = asyncHandler(async (req, res) => {
+export const createAccount = asyncHandler(async (req, res) => {
   requireFields(req.body, ['name', 'type']);
   const b = req.body;
   if (!['cash', 'bank', 'mfs', 'card'].includes(b.type)) throw badRequest('Invalid account type');
@@ -32,7 +32,7 @@ exports.createAccount = asyncHandler(async (req, res) => {
   res.status(201).json({ id });
 });
 
-exports.updateAccount = asyncHandler(async (req, res) => {
+export const updateAccount = asyncHandler(async (req, res) => {
   const a = await one('SELECT * FROM accounts WHERE id = ?', [req.params.id]);
   if (!a) throw notFound();
   const b = { ...a, ...req.body };
@@ -46,7 +46,7 @@ exports.updateAccount = asyncHandler(async (req, res) => {
 });
 
 /** GET /accounts/:id/transactions?from=&to= — account statement with running balance */
-exports.accountStatement = asyncHandler(async (req, res) => {
+export const accountStatement = asyncHandler(async (req, res) => {
   const a = await one('SELECT * FROM accounts WHERE id = ?', [req.params.id]);
   if (!a) throw notFound();
   const { from, to } = req.query;
@@ -66,7 +66,7 @@ exports.accountStatement = asyncHandler(async (req, res) => {
 });
 
 /** POST /accounts/transfer { from_account_id, to_account_id, amount, note, date } e.g. cash → bKash */
-exports.transfer = asyncHandler(async (req, res) => {
+export const transfer = asyncHandler(async (req, res) => {
   requireFields(req.body, ['from_account_id', 'to_account_id', 'amount']);
   const { from_account_id: fromId, to_account_id: toId, note = null } = req.body;
   const amount = money(req.body.amount);
@@ -82,7 +82,7 @@ exports.transfer = asyncHandler(async (req, res) => {
 });
 
 /** POST /accounts/:id/entry { direction: in|out, amount, note } — owner deposit / withdrawal */
-exports.manualEntry = asyncHandler(async (req, res) => {
+export const manualEntry = asyncHandler(async (req, res) => {
   requireFields(req.body, ['direction', 'amount']);
   const amount = money(req.body.amount);
   if (amount <= 0) throw badRequest('Amount must be positive');
@@ -96,7 +96,7 @@ exports.manualEntry = asyncHandler(async (req, res) => {
 
 // ---------- Supplier Payments (Payment menu) ----------
 /** POST /payments { supplier_id, account_id, amount, payment_date?, purchase_id?, trx_ref?, note? } */
-exports.createPayment = asyncHandler(async (req, res) => {
+export const createPayment = asyncHandler(async (req, res) => {
   requireFields(req.body, ['supplier_id', 'account_id', 'amount']);
   const b = req.body;
   const amount = money(b.amount);
@@ -116,7 +116,7 @@ exports.createPayment = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
-exports.listPayments = asyncHandler(async (req, res) => {
+export const listPayments = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query);
   const where = ['1=1'];
   const params = [];
@@ -131,7 +131,7 @@ exports.listPayments = asyncHandler(async (req, res) => {
 });
 
 /** GET /payments/payables — suppliers we owe, biggest first */
-exports.payables = asyncHandler(async (req, res) => {
+export const payables = asyncHandler(async (req, res) => {
   res.json(await query(
     `SELECT s.id, s.name, s.company, s.phone, ROUND(b.balance,2) AS balance,
        (SELECT MAX(payment_date) FROM supplier_payments x WHERE x.supplier_id = s.id) AS last_payment
@@ -144,7 +144,7 @@ exports.payables = asyncHandler(async (req, res) => {
  *                     waive_amount?, next_payment_date?, trx_ref?, note? }
  * waive_amount books a "round_off" deduction on the customer ledger (e.g. forgive the last 20 Tk).
  */
-exports.createCollection = asyncHandler(async (req, res) => {
+export const createCollection = asyncHandler(async (req, res) => {
   requireFields(req.body, ['customer_id', 'account_id', 'amount']);
   const b = req.body;
   const amount = money(b.amount);
@@ -173,7 +173,7 @@ exports.createCollection = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
-exports.listCollections = asyncHandler(async (req, res) => {
+export const listCollections = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query);
   const where = ['1=1'];
   const params = [];
@@ -188,7 +188,7 @@ exports.listCollections = asyncHandler(async (req, res) => {
 });
 
 /** GET /collections/receivables?area=&overdue=1 — customers who owe us */
-exports.receivables = asyncHandler(async (req, res) => {
+export const receivables = asyncHandler(async (req, res) => {
   const params = [];
   let extra = '';
   if (req.query.area) { extra += ' AND (c.area ILIKE ? OR c.address ILIKE ?)'; params.push(`%${req.query.area}%`, `%${req.query.area}%`); }
@@ -204,14 +204,14 @@ exports.receivables = asyncHandler(async (req, res) => {
 });
 
 // ---------- Expenses ----------
-exports.listExpenseCategories = asyncHandler(async (req, res) => res.json(await query('SELECT * FROM expense_categories ORDER BY name')));
-exports.createExpenseCategory = asyncHandler(async (req, res) => {
+export const listExpenseCategories = asyncHandler(async (req, res) => res.json(await query('SELECT * FROM expense_categories ORDER BY name')));
+export const createExpenseCategory = asyncHandler(async (req, res) => {
   requireFields(req.body, ['name']);
   const r = await query('INSERT INTO expense_categories (name) VALUES (?)', [req.body.name.trim()]);
   res.status(201).json({ id: r.insertId });
 });
 
-exports.createExpense = asyncHandler(async (req, res) => {
+export const createExpense = asyncHandler(async (req, res) => {
   requireFields(req.body, ['account_id', 'amount']);
   const amount = money(req.body.amount);
   if (amount <= 0) throw badRequest('Amount must be positive');
@@ -226,7 +226,7 @@ exports.createExpense = asyncHandler(async (req, res) => {
   res.status(201).json({ id });
 });
 
-exports.listExpenses = asyncHandler(async (req, res) => {
+export const listExpenses = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query);
   const where = ['1=1'];
   const params = [];

@@ -4,15 +4,17 @@
  * (CREATE … IF NOT EXISTS / CREATE OR REPLACE), so this is safe to run on
  * every start. On Supabase you can also apply them with `supabase db push`.
  */
-const fs = require('fs');
-const path = require('path');
-const { pool } = require('../config/db');
+import fs from 'node:fs';
+import path from 'node:path';
+import process from 'node:process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pool } from '../config/db.js';
 
 function migrationsDir() {
   const candidates = [
     process.env.MIGRATIONS_DIR,
-    path.resolve(__dirname, '../../../supabase/migrations'), // repo layout
-    path.resolve(__dirname, '../../migrations'),             // packaged (desktop/server)
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../supabase/migrations'), // repo layout
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../migrations'),             // packaged (desktop/server)
   ].filter(Boolean);
   const dir = candidates.find((d) => fs.existsSync(d));
   if (!dir) throw new Error('Migrations folder not found');
@@ -32,7 +34,7 @@ async function migrate() {
   console.log(`✅ Database schema up to date (${files.length} migration file${files.length === 1 ? '' : 's'})`);
 }
 
-if (require.main === module) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   migrate().then(() => pool.end()).catch((e) => { console.error('❌ Migration failed:', e.message); process.exit(1); });
 }
-module.exports = migrate;
+export default migrate;

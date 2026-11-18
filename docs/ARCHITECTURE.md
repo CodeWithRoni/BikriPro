@@ -17,7 +17,8 @@
                          │  • Sharp image engine        │
                          │  • node-cron (birthday SMS)  │
                          │  • SMS gateway adapter       │
-                         │  (Render / any Node host)    │
+                         │  (Supabase Edge Function or  │
+                         │   any Node.js host)          │
                          └──────────────┬──────────────┘
                                         │ node-postgres pool (SSL, Session pooler)
                          ┌──────────────▼──────────────┐
@@ -29,20 +30,22 @@ One codebase serves every platform: the React build is loaded from disk by Elect
 
 ## 2. Backend layout (`backend/src`)
 
+The backend is ESM JavaScript that runs unchanged on Node.js and on Supabase Edge Functions (Deno). `npm run build:edge` bundles it into `supabase/functions/api/bikripro.js`; npm packages are loaded as `npm:` specifiers, and Node-only extras (`sharp`, `node-cron`, `dotenv`) are stubbed. On the edge, the database URL and Storage key are provided by Supabase, and the JWT signing key is a random secret kept in the `settings` table.
+
 | Path | Responsibility |
 |---|---|
 | `config/env.js`, `config/db.js` | Environment, PostgreSQL pool; `?` placeholders converted to `$n` (arrays expanded), automatic `RETURNING id`, `transaction()` helper |
 | `middleware/auth.js` | JWT verification, hierarchical `authorize('cashier'|'manager'|'admin')` |
 | `middleware/upload.js` | Multer memory storage (images go straight to Sharp) |
 | `controllers/*.js` | One controller per module (see routes) |
-| `services/image.service.js` | 500×500 normalisation: EXIF rotate → trim borders → `contain` fit on white → adaptive WebP compression |
+| `services/image.service.js` | Stores product photos/logo; on Node with `sharp` it also re-normalises raw uploads. The 500×500 trim → contain → WebP pipeline runs on the device in `frontend/src/utils/image.js` |
 | `services/storage.service.js` | Saves images to a public Supabase Storage bucket (secret key, server-side only) or to local disk |
 | `services/stock.service.js` | Row-locked stock changes (`SELECT … FOR UPDATE`), negative-stock guard |
 | `services/accounts.service.js` | Cash-book entries for every money movement |
 | `services/loyalty.service.js` | Earn / redeem / reverse points |
 | `services/sms.service.js` | Templates, BD phone normalisation, provider adapter, `sms_logs` |
 | `services/backup.service.js` | JSON export, transactional import, module reset plans |
-| `services/cron.service.js` | Daily birthday wishes |
+| `services/cron.service.js` | Daily birthday wishes (node-cron on Node; on Supabase, `pg_cron` calls `POST /api/cron/birthdays` with the DB-held cron secret) |
 | `utils/numbering.js` | Atomic document numbers (`INV-000001`, `PUR-…`, `COL-…`) |
 | `utils/activity.js` | Activity log writer |
 | `/supabase/migrations/*.sql`, `db/migrate.js`, `db/seed.js` | PostgreSQL schema, idempotent migration runner, first-run data |

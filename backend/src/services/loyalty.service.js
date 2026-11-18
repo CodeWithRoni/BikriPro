@@ -1,5 +1,5 @@
-const settings = require('./settings.service');
-const { money } = require('../utils/http');
+import * as settings from './settings.service.js';
+import { money } from '../utils/http.js';
 
 async function getConfig() {
   const s = await settings.getAll();
@@ -29,4 +29,4 @@ async function applyPoints(conn, { customerId, saleId = null, type, points, note
 
 const valueOf = (points, cfg) => money(points * cfg.pointValue);
 
-module.exports = { getConfig, pointsFor, applyPoints, valueOf };
+export { getConfig, pointsFor, applyPoints, valueOf };

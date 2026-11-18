@@ -5,11 +5,10 @@
  * Due-collection reminders are query-driven (see dashboard controller), so
  * they appear on the dashboard the moment the due date arrives — no job needed.
  */
-const cron = require('node-cron');
-const env = require('../config/env');
-const { query } = require('../config/db');
-const settings = require('./settings.service');
-const { sendSms, render } = require('./sms.service');
+import env from '../config/env.js';
+import { query } from '../config/db.js';
+import * as settings from './settings.service.js';
+import { sendSms, render } from './sms.service.js';
 
 async function runBirthdayWishes() {
   const s = await settings.getAll();
@@ -30,7 +29,8 @@ async function runBirthdayWishes() {
   return { sent, total: customers.length };
 }
 
-function startCron() {
+async function startCron() {
+  const { default: cron } = await import('node-cron');
   if (!cron.validate(env.birthdayCron)) {
     console.warn('[cron] invalid BIRTHDAY_SMS_CRON, birthday job disabled');
     return;
@@ -43,4 +43,4 @@ function startCron() {
   console.log(`[cron] birthday SMS scheduled "${env.birthdayCron}" (${env.timezone})`);
 }
 
-module.exports = { startCron, runBirthdayWishes };
+export { startCron, runBirthdayWishes };

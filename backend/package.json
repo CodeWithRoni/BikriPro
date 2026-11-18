@@ -1,9 +1,9 @@
 {
   "name": "bikripro-backend",
   "version": "1.0.0",
-  "description": "BikriPro POS & ERP — REST API (Node.js, Express, PostgreSQL / Supabase)",
+  "description": "BikriPro POS & ERP \u2014 REST API (Node.js, Express, PostgreSQL / Supabase)",
   "main": "src/server.js",
-  "type": "commonjs",
+  "type": "module",
   "private": true,
   "scripts": {
     "start": "node src/server.js",
@@ -11,7 +11,8 @@
     "migrate": "node src/db/migrate.js",
     "seed": "node src/db/seed.js",
     "setup": "npm run migrate && npm run seed",
-    "test": "node --test tests/unit.test.js"
+    "test": "node --test tests/unit.test.js",
+    "build:edge": "node scripts/build-edge.mjs"
   },
   "engines": {
     "node": ">=18"
@@ -30,5 +31,8 @@
     "node-cron": "^3.0.3",
     "pg": "^8.23.1",
     "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2"
   }
 }

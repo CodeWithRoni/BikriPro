@@ -10,8 +10,8 @@
  * automatically and exposes `rows.insertId`; every result exposes
  * `rows.rowCount`.
  */
-const { Pool, types } = require('pg');
-const env = require('./env');
+import { Pool, types } from 'pg';
+import env from './env.js';
 
 // Return numbers as JS numbers (money is numeric(14,2), counts are bigint)
 types.setTypeParser(1700, (v) => (v === null ? null : parseFloat(v))); // numeric
@@ -103,4 +103,4 @@ async function transaction(fn) {
   }
 }
 
-module.exports = { pool, query, one, transaction, toPg };
+export { pool, query, one, transaction, toPg };

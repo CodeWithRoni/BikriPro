@@ -1,4 +1,4 @@
-const { query } = require('../config/db');
+import { query } from '../config/db.js';
 
 /**
  * Record an entry in the Activity Log. Never throws: logging must not break
@@ -23,4 +23,4 @@ async function logActivity(req, module, action, refId = null, details = null, co
   }
 }
 
-module.exports = { logActivity };
+export { logActivity };

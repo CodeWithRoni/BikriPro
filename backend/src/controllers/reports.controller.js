@@ -1,9 +1,9 @@
 /**
  * Dashboard · Profit · Report Hub · Price Manager · Activity Log
  */
-const { query, transaction } = require('../config/db');
-const { asyncHandler, badRequest, paging, money, today } = require('../utils/http');
-const { logActivity } = require('../utils/activity');
+import { query, transaction } from '../config/db.js';
+import { asyncHandler, badRequest, paging, money, today } from '../utils/http.js';
+import { logActivity } from '../utils/activity.js';
 
 const range = (q) => {
   const t = today();
@@ -11,7 +11,7 @@ const range = (q) => {
 };
 
 // ---------- Dashboard ----------
-exports.dashboard = asyncHandler(async (req, res) => {
+export const dashboard = asyncHandler(async (req, res) => {
   const t = today();
   const [todaySales] = await query(
     `SELECT COUNT(*) AS invoices, COALESCE(SUM(grand_total),0) AS amount, COALESCE(SUM(paid_amount),0) AS cash_in,
@@ -73,7 +73,7 @@ exports.dashboard = asyncHandler(async (req, res) => {
 
 // ---------- Profit ----------
 /** GET /reports/profit?from=&to= — revenue, COGS, gross profit, expenses, net profit + daily rows */
-exports.profit = asyncHandler(async (req, res) => {
+export const profit = asyncHandler(async (req, res) => {
   const { from, to } = range(req.query);
   const daily = await query(
     `SELECT d.day,
@@ -161,9 +161,9 @@ const REPORTS = {
      WHERE DATE(l.created_at) BETWEEN ? AND ? ORDER BY l.id DESC LIMIT 1000`, [from, to]),
 };
 
-exports.reportList = (req, res) => res.json(Object.keys(REPORTS));
+export const reportList = (req, res) => res.json(Object.keys(REPORTS));
 
-exports.report = asyncHandler(async (req, res) => {
+export const report = asyncHandler(async (req, res) => {
   const fn = REPORTS[req.params.name];
   if (!fn) throw badRequest('Unknown report');
   const r = range(req.query);
@@ -172,7 +172,7 @@ exports.report = asyncHandler(async (req, res) => {
 
 // ---------- Price Manager ----------
 /** GET /price-manager?filter=unpriced|no_retail|no_wholesale|below_cost&category_id=&brand_id=&q= */
-exports.priceList = asyncHandler(async (req, res) => {
+export const priceList = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query, 100);
   const where = ['v.is_active = true', 'p.is_active = true'];
   const params = [];
@@ -207,7 +207,7 @@ exports.priceList = asyncHandler(async (req, res) => {
  * { updates: [{ variant_id, purchase_price?, retail_price?, wholesale_price? }] }  — individual edits
  * or { variant_ids: [...], rule: { field: 'retail_price', mode: 'markup_percent'|'set'|'increase_percent'|'increase_amount', value } }
  */
-exports.priceBulk = asyncHandler(async (req, res) => {
+export const priceBulk = asyncHandler(async (req, res) => {
   const { updates, variant_ids: ids, rule } = req.body;
   let changes = [];
   if (Array.isArray(updates)) changes = updates;
@@ -249,7 +249,7 @@ exports.priceBulk = asyncHandler(async (req, res) => {
   res.json({ updated });
 });
 
-exports.priceHistory = asyncHandler(async (req, res) => {
+export const priceHistory = asyncHandler(async (req, res) => {
   res.json(await query(
     `SELECT h.*, u.name AS user_name FROM price_history h LEFT JOIN users u ON u.id = h.user_id WHERE h.variant_id = ? ORDER BY h.id DESC LIMIT 50`,
     [req.params.variantId]));
@@ -257,7 +257,7 @@ exports.priceHistory = asyncHandler(async (req, res) => {
 
 // ---------- Barcode labels ----------
 /** GET /barcode/purchase/:id — items + qty of a purchase, ready for the print queue */
-exports.barcodeFromPurchase = asyncHandler(async (req, res) => {
+export const barcodeFromPurchase = asyncHandler(async (req, res) => {
   const rows = await query(
     `SELECT v.id AS variant_id, p.name, b.name AS brand, v.sku, v.barcode, v.size, v.color, v.retail_price, v.wholesale_price,
             (pi.qty - pi.returned_qty) AS qty
@@ -267,7 +267,7 @@ exports.barcodeFromPurchase = asyncHandler(async (req, res) => {
 });
 
 // ---------- Activity Log ----------
-exports.activity = asyncHandler(async (req, res) => {
+export const activity = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query, 50);
   const where = ['1=1'];
   const params = [];

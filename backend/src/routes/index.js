@@ -2,19 +2,19 @@
  * BikriPro REST API — all routes under /api
  * Roles: cashier < manager < admin (authorize(min) allows that role and above)
  */
-const express = require('express');
-const rateLimit = require('express-rate-limit');
-const { authenticate, authorize } = require('../middleware/auth');
-const { imageUpload, backupUpload } = require('../middleware/upload');
+import express from 'express';
+import rateLimit from 'express-rate-limit';
+import { authenticate, authorize } from '../middleware/auth.js';
+import { imageUpload, backupUpload } from '../middleware/upload.js';
 
-const auth = require('../controllers/auth.controller');
-const products = require('../controllers/products.controller');
-const { customers, suppliers } = require('../controllers/parties.controller');
-const sales = require('../controllers/sales.controller');
-const purchases = require('../controllers/purchases.controller');
-const finance = require('../controllers/finance.controller');
-const reports = require('../controllers/reports.controller');
-const settings = require('../controllers/settings.controller');
+import * as auth from '../controllers/auth.controller.js';
+import * as products from '../controllers/products.controller.js';
+import { customers, suppliers } from '../controllers/parties.controller.js';
+import * as sales from '../controllers/sales.controller.js';
+import * as purchases from '../controllers/purchases.controller.js';
+import * as finance from '../controllers/finance.controller.js';
+import * as reports from '../controllers/reports.controller.js';
+import * as settings from '../controllers/settings.controller.js';
 
 const r = express.Router();
 const M = authorize('manager');
@@ -24,6 +24,7 @@ const A = authorize('admin');
 r.get('/health', (req, res) => res.json({ ok: true, app: 'BikriPro', time: new Date().toISOString() }));
 r.post('/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false }), auth.login);
 r.get('/settings/public', settings.publicSettings);
+r.post('/cron/birthdays', settings.cronBirthdays); // protected by CRON_SECRET header
 
 // Everything below requires a valid JWT
 r.use(authenticate);
@@ -134,4 +135,4 @@ r.post('/settings/reset', A, settings.resetDb);
 r.post('/settings/sms/test', A, settings.testSms);
 r.post('/settings/sms/birthdays', A, settings.runBirthdays);
 
-module.exports = r;
+export default r;

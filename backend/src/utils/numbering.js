@@ -19,4 +19,4 @@ async function nextNumber(conn, kind) {
   return `${prefix}-${String(row.last_value).padStart(6, '0')}`;
 }
 
-module.exports = { nextNumber };
+export { nextNumber };

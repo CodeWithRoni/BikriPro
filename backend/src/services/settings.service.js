@@ -1,4 +1,4 @@
-const { query } = require('../config/db');
+import { query } from '../config/db.js';
 
 /** Defaults are returned for any key not yet saved in the settings table. */
 const DEFAULTS = {
@@ -27,7 +27,7 @@ const DEFAULTS = {
 };
 
 // Keys never sent to the client
-const SECRET_KEYS = ['security_pin_hash'];
+const SECRET_KEYS = ['security_pin_hash', 'jwt_secret', 'cron_secret'];
 
 async function getAll({ includeSecret = false } = {}) {
   const rows = await query('SELECT setting_key, setting_value FROM settings');
@@ -59,4 +59,22 @@ async function setSecret(key, value) {
   );
 }
 
-module.exports = { DEFAULTS, getAll, get, setMany, setSecret };
+/**
+ * Server-only random secret stored in the settings table (created on first
+ * use if missing, e.g. after a restore). Cached in memory.
+ */
+const secretCache = {};
+async function appSecret(key) {
+  if (secretCache[key]) return secretCache[key];
+  await query(
+    `INSERT INTO settings (setting_key, setting_value)
+     VALUES (?, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''))
+     ON CONFLICT (setting_key) DO NOTHING`,
+    [key]
+  );
+  const row = (await query('SELECT setting_value FROM settings WHERE setting_key = ?', [key]))[0];
+  secretCache[key] = row.setting_value;
+  return secretCache[key];
+}
+
+export { DEFAULTS, SECRET_KEYS, getAll, get, setMany, setSecret, appSecret };

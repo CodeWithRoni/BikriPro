@@ -6,8 +6,8 @@
  *   ("embedded server") so a single shop PC can be the server + till.
  *   Other tills, tablets and phones on the same Wi-Fi then connect to
  *   http://<this-PC-IP>:5000 (Login → Server).
- * - Recommended: leave EMBEDDED_SERVER=0 and use the cloud API (Supabase +
- *   Render, see docs/SUPABASE.md). For an offline shop, set EMBEDDED_SERVER=1
+ * - Recommended: leave EMBEDDED_SERVER=0 and use the cloud API on Supabase
+ *   (see docs/SUPABASE.md). For an offline shop, set EMBEDDED_SERVER=1
  *   and DATABASE_URL to a local PostgreSQL.
  *
  * Config lives in <userData>/server.env (File → Server settings).

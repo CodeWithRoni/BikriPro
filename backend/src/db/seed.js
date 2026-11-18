@@ -5,8 +5,10 @@
  *
  * Default login:  admin / admin123     Security PIN: 1234   (change both after first login!)
  */
-const bcrypt = require('bcryptjs');
-const { pool, query } = require('../config/db');
+import process from 'node:process';
+import { pathToFileURL } from 'node:url';
+import bcrypt from 'bcryptjs';
+import { pool, query } from '../config/db.js';
 
 async function seed({ demo = process.argv.includes('--demo') } = {}) {
   const q = query;
@@ -64,7 +66,7 @@ async function seed({ demo = process.argv.includes('--demo') } = {}) {
   console.log('✅ Seed complete');
 }
 
-if (require.main === module) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   seed().then(() => pool.end()).catch((e) => { console.error('❌ Seed failed:', e.message); process.exit(1); });
 }
-module.exports = seed;
+export default seed;

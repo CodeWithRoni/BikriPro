@@ -1,81 +1,84 @@
-# Running BikriPro on Supabase (cloud)
+# BikriPro on Supabase (cloud)
 
-BikriPro's cloud setup has three parts, all with free tiers:
+Everything runs on Supabase — no other server or hosting account is needed.
 
-| Part | Service | What it holds |
+| Part | Supabase feature | Details |
 |---|---|---|
-| Database + image storage | **Supabase** (PostgreSQL + Storage) | All shop data, product photos, shop logo |
-| API + web app | **Render** web service (`render.yaml`) | Node/Express API on HTTPS, also serves the web app |
-| Website | **GitHub Pages** | Landing page and a copy of the web app at `/app/` |
-
-Every till, phone, tablet and browser then talks to one HTTPS address, from anywhere.
+| Database | PostgreSQL | All shop data. Schema in `supabase/migrations/` |
+| API | **Edge Function `api`** | The same Express API as `backend/`, bundled for Supabase's Deno runtime |
+| Images | Storage bucket `bikripro` | Product photos (500×500, made on the device) and the shop logo |
+| Birthday SMS | `pg_cron` + `pg_net` | Calls the API once a day at 10:00 Bangladesh time |
+| Website | GitHub Pages | Landing page + web app at `/app/` |
 
 ```
- Windows/Mac/Linux app ─┐
- Android / iPhone app ──┼──► https://bikripro-api.onrender.com/api ──► Supabase Postgres
- Browser / GitHub Pages ┘          (Render, Singapore)                 + Supabase Storage
+ Windows / Mac / Linux app ─┐
+ Android / iPhone app ──────┼──► https://pnhaxcbxhbjvqzpohbet.supabase.co/functions/v1/api
+ Browser (GitHub Pages) ────┘        Edge Function ──► Postgres + Storage
 ```
 
-## 1. Create the Supabase project
+**Project:** `bikripro` (organization *BikriPro's Org*, region Singapore `ap-southeast-1`)
+**API URL used by all apps:** `https://pnhaxcbxhbjvqzpohbet.supabase.co/functions/v1` (set in `frontend/.env.production`)
 
-1. In your new **BikriPro** organization click **New project**.
-   - Name: `bikripro`
-   - Database password: generate a strong one and **save it** (you need it in step 3).
-   - Region: **Southeast Asia (Singapore)** — closest to Bangladesh and to Render's Singapore region.
-2. Wait until the project is ready.
+## Security model
 
-## 2. Create the tables
+- Every table has Row Level Security on with **no policies**, and the `anon` / `authenticated` roles have no grants. Supabase's publishable/anon keys therefore can't read or change any shop data.
+- Only the Edge Function talks to the database (with the connection string Supabase gives it). It enforces BikriPro's own login and Admin / Manager / Cashier permissions.
+- The login-token signing key and the cron key are random values generated inside the database (`settings.jwt_secret`, `settings.cron_secret`). They are never sent to apps and never included in backups. You don't have to type any secret anywhere.
+- The function is deployed with "Verify JWT" **off**, because BikriPro uses its own login tokens, not Supabase Auth.
 
-Pick one:
+## First login
 
-- **Automatic (easiest):** do nothing — the API creates all tables, the first admin user and default accounts on its first start.
-- **Supabase CLI:** `supabase link --project-ref <ref>` then `supabase db push` (applies `supabase/migrations/`).
-- **SQL Editor:** paste `supabase/migrations/20261118000000_bikripro_init.sql` and run it.
+Open the web app (GitHub Pages `/app/`, or any BikriPro app) and sign in with **admin / admin123**.
+Change the password (top-right menu) and the security PIN (Shop Setup → Security PIN, default **1234**) immediately.
 
-Security: every table has Row Level Security enabled with no policies, and the `anon` / `authenticated` roles are revoked. Supabase's publishable/anon keys therefore cannot read or change shop data. Only the BikriPro API (which connects with the database password) can, and it enforces Admin / Manager / Cashier permissions itself.
+## Updating the API after code changes
 
-## 3. Collect three values from Supabase
-
-| Value | Where |
-|---|---|
-| `DATABASE_URL` | Project → **Connect** → **Session pooler** → URI. Replace `[YOUR-PASSWORD]` with the database password. Looks like `postgresql://postgres.abcd…:PASSWORD@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres` |
-| `SUPABASE_URL` | Settings → API → **Project URL** (`https://abcd….supabase.co`) |
-| `SUPABASE_SECRET_KEY` | Settings → **API Keys** → **Secret keys** → create/copy `sb_secret_…` |
-
-Use the **Session pooler** (port 5432), not the direct connection: Render and most home/shop networks are IPv4-only, and the direct connection is IPv6. Never put the secret key in the frontend, the mobile app or GitHub — it only goes into the server's environment variables.
-
-## 4. Deploy the API on Render
-
-1. Sign in to [render.com](https://render.com) with GitHub.
-2. **New → Blueprint** → choose `CodeWithRoni/BikriPro`. Render reads `render.yaml`.
-3. Paste `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` when asked. `JWT_SECRET` is generated automatically.
-4. Deploy. The first start creates the tables and prints `✅ BikriPro API running`.
-5. Open `https://<your-service>.onrender.com` → sign in with **admin / admin123**, then change the password and the security PIN (default **1234**) immediately.
-
-The free Render plan sleeps after 15 minutes without requests; the first request after that takes up to a minute. For a shop that opens all day, choose the **Starter** plan (always on) by changing `plan: free` to `plan: starter` in `render.yaml`.
-
-## 5. Point all apps at the server
-
-Set it once in GitHub so every build uses it:
-
-GitHub → repo **Settings → Secrets and variables → Actions → Variables → New variable**
-- Name: `BIKRIPRO_API_URL`
-- Value: `https://<your-service>.onrender.com`
-
-Then re-run **Deploy website** (GitHub Pages web app) and **Build installers** (exe / dmg / deb / apk / ipa). Users can still change the address on the login screen (**Server** button).
-
-## 6. Local development against Supabase
+The bundle `supabase/functions/api/bikripro.js` is generated from `backend/src`:
 
 ```bash
-cp backend/.env.example backend/.env
-# put DATABASE_URL (and optionally SUPABASE_URL / SUPABASE_SECRET_KEY) in backend/.env
-npm run dev:api     # creates tables on first start
-npm run dev:web
+cd backend
+npm run build:edge        # rebuild the bundle
 ```
 
-Or run a local PostgreSQL and use `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/bikripro`.
+Deploy it in one of these ways:
+
+1. **Automatic (recommended):** add a GitHub secret `SUPABASE_ACCESS_TOKEN` (a scoped personal access token from supabase.com → Account → Access Tokens). Every push to `main` that touches the backend runs **Deploy API to Supabase**.
+2. **Supabase CLI:** `supabase functions deploy api --project-ref pnhaxcbxhbjvqzpohbet --no-verify-jwt --use-api`
+
+New database migrations are applied with `supabase db push` (or by pasting the SQL into the dashboard SQL editor).
+
+## Birthday SMS schedule
+
+Created once in the SQL editor (already done for the `bikripro` project):
+
+```sql
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+select cron.schedule('bikripro-birthday-sms', '0 4 * * *', $$
+  select net.http_post(
+    url     := 'https://pnhaxcbxhbjvqzpohbet.supabase.co/functions/v1/api/cron/birthdays',
+    headers := jsonb_build_object('Content-Type', 'application/json',
+               'x-cron-secret', (select setting_value from public.settings where setting_key = 'cron_secret')),
+    body    := '{}'::jsonb)
+$$);
+```
+
+`0 4 * * *` UTC is 10:00 in Bangladesh.
+
+## SMS gateway
+
+Add Edge Function secrets in the dashboard (Edge Functions → Secrets): `SMS_PROVIDER` (`bulksmsbd` or `generic`), `SMS_API_URL`, `SMS_API_KEY`, `SMS_SENDER_ID`. Until then messages are only logged (Report Hub → SMS log).
+
+## Running the API yourself instead (optional)
+
+The `backend/` folder is still a normal Node.js server. Point it at the same database with `DATABASE_URL` (Supabase → Connect → Session pooler URI) and it behaves exactly like the Edge Function — useful for an offline shop PC or local development:
+
+```bash
+cp backend/.env.example backend/.env   # set DATABASE_URL
+npm run dev:api
+```
 
 ## Free-plan notes
 
-- Supabase free projects pause after 7 days with no database activity (a shop that sells daily never hits this) and include 500 MB of database space — enough for years of a single shop's invoices. Product photos are ~20–40 KB each in the 1 GB storage.
-- Keep using **Shop Setup → Backup & Reset → Export database** regularly; free Supabase projects have no automatic backups.
+- Supabase free projects pause after 7 days without any database activity (a shop selling daily never hits this). 500 MB database and 1 GB storage are enough for years of a single shop's data.
+- Free projects have no automatic backups — use **Shop Setup → Backup & Reset → Export database** regularly.

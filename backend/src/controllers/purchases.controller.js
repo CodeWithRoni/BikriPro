@@ -1,9 +1,9 @@
-const { query, one, transaction } = require('../config/db');
-const { asyncHandler, requireFields, badRequest, notFound, paging, money, today } = require('../utils/http');
-const { logActivity } = require('../utils/activity');
-const { nextNumber } = require('../utils/numbering');
-const { adjustStock } = require('../services/stock.service');
-const { recordTxn } = require('../services/accounts.service');
+import { query, one, transaction } from '../config/db.js';
+import { asyncHandler, requireFields, badRequest, notFound, paging, money, today } from '../utils/http.js';
+import { logActivity } from '../utils/activity.js';
+import { nextNumber } from '../utils/numbering.js';
+import { adjustStock } from '../services/stock.service.js';
+import { recordTxn } from '../services/accounts.service.js';
 
 /**
  * POST /purchases
@@ -13,7 +13,7 @@ const { recordTxn } = require('../services/accounts.service');
  * Stock goes up, latest cost becomes the variant's purchase price, and an
  * optional new retail/wholesale price can be set straight from the purchase.
  */
-exports.create = asyncHandler(async (req, res) => {
+export const create = asyncHandler(async (req, res) => {
   const b = req.body;
   requireFields(b, ['supplier_id']);
   if (!Array.isArray(b.items) || !b.items.length) throw badRequest('Add at least one item');
@@ -88,13 +88,13 @@ async function loadPurchase(id) {
   return p;
 }
 
-exports.get = asyncHandler(async (req, res) => {
+export const get = asyncHandler(async (req, res) => {
   const p = await loadPurchase(req.params.id);
   if (!p) throw notFound('Purchase not found');
   res.json(p);
 });
 
-exports.list = asyncHandler(async (req, res) => {
+export const list = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query);
   const where = ['1=1'];
   const params = [];
@@ -114,7 +114,7 @@ exports.list = asyncHandler(async (req, res) => {
 });
 
 /** GET /purchases/recent — last 10 purchase invoices (Barcode Labels picker) */
-exports.recent = asyncHandler(async (req, res) => {
+export const recent = asyncHandler(async (req, res) => {
   res.json(await query(
     `SELECT p.id, p.invoice_no, p.purchase_date, s.name AS supplier_name,
        (SELECT COALESCE(SUM(pi.qty),0) FROM purchase_items pi WHERE pi.purchase_id = p.id) AS total_qty
@@ -122,7 +122,7 @@ exports.recent = asyncHandler(async (req, res) => {
 });
 
 // ---------- Purchase Return ----------
-exports.createReturn = asyncHandler(async (req, res) => {
+export const createReturn = asyncHandler(async (req, res) => {
   requireFields(req.body, ['purchase_id', 'items']);
   const b = req.body;
   const result = await transaction(async (conn) => {
@@ -169,7 +169,7 @@ exports.createReturn = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
-exports.listReturns = asyncHandler(async (req, res) => {
+export const listReturns = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query);
   const rows = await query(
     `SELECT r.*, p.invoice_no, s.name AS supplier_name FROM purchase_returns r JOIN purchases p ON p.id = r.purchase_id
@@ -177,4 +177,4 @@ exports.listReturns = asyncHandler(async (req, res) => {
   res.json({ data: rows, page, limit });
 });
 
-exports.loadPurchase = loadPurchase;
+export { loadPurchase as loadPurchase };

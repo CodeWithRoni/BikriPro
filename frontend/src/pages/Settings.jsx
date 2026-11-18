@@ -7,6 +7,7 @@ import useApi from '../hooks/useApi';
 import { settingsLoaded } from '../store';
 import { PageHeader, Tabs, Field, Modal, Badge, Spinner } from '../components/ui';
 import { fmtDateTime, tk, cls } from '../utils/format';
+import { processLogo, blobName } from '../utils/image';
 
 const TABS = [['shop', 'Shop info'], ['loyalty', 'Loyalty'], ['sms', 'SMS'], ['users', 'Users'], ['security', 'Security PIN'], ['data', 'Backup & Reset']];
 
@@ -67,8 +68,12 @@ function ShopInfo({ s, bind, toggle, save, onLogo }) {
   const upload = async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    const fd = new FormData(); fd.append('logo', f);
-    try { await api.post('/settings/logo', fd); toast.success('Logo updated'); onLogo(); } catch (err) { toast.error(err.message); }
+    e.target.value = '';
+    try {
+      const { blob } = await processLogo(f);
+      const fd = new FormData(); fd.append('logo', blob, blobName(blob, 'logo'));
+      await api.post('/settings/logo', fd); toast.success('Logo updated'); onLogo();
+    } catch (err) { toast.error(err.message); }
   };
   return (
     <Section icon={Store} title="Shop information (receipts & labels)"

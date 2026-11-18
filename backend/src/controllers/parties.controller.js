@@ -7,9 +7,9 @@
  *                              shop owes supplier more)
  *                     credit = decreases the balance
  */
-const { query, one, transaction } = require('../config/db');
-const { asyncHandler, requireFields, badRequest, notFound, paging, money, today } = require('../utils/http');
-const { logActivity } = require('../utils/activity');
+import { query, one, transaction } from '../config/db.js';
+import { asyncHandler, requireFields, badRequest, notFound, paging, money, today } from '../utils/http.js';
+import { logActivity } from '../utils/activity.js';
 
 const CONF = {
   customer: { table: 'customers', contacts: 'customer_contacts', fk: 'customer_id', view: 'v_customer_balance', viewFk: 'customer_id' },
@@ -261,4 +261,6 @@ function build(type) {
   return ctrl;
 }
 
-module.exports = { customers: build('customer'), suppliers: build('supplier'), allocateFifo };
+export const customers = build('customer');
+export const suppliers = build('supplier');
+export { allocateFifo };

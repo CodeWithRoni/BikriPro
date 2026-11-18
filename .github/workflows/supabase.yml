@@ -1,0 +1,48 @@
+# Deploys the BikriPro API to Supabase Edge Functions whenever backend code
+# changes on main. One-time setup (GitHub → Settings → Secrets and variables
+# → Actions → New repository secret):
+#   SUPABASE_ACCESS_TOKEN — a scoped personal access token from
+#   supabase.com/dashboard/account/tokens (Edge Functions write on this project)
+# New database migrations (supabase/migrations) are not applied by the edge
+# function — apply them with `supabase db push` or the dashboard SQL editor.
+name: Deploy API to Supabase
+
+on:
+  push:
+    branches: [main]
+    paths: ['backend/src/**', 'backend/package.json', 'backend/package-lock.json', 'backend/scripts/build-edge.mjs', 'supabase/functions/**']
+  workflow_dispatch:
+
+env:
+  SUPABASE_PROJECT_REF: pnhaxcbxhbjvqzpohbet
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check token
+        id: token
+        run: |
+          if [ -z "${{ secrets.SUPABASE_ACCESS_TOKEN }}" ]; then
+            echo "SUPABASE_ACCESS_TOKEN is not set — skipping deploy."; echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.token.outputs.skip != 'true'
+        with:
+          node-version: 20
+      - name: Build edge bundle
+        if: steps.token.outputs.skip != 'true'
+        working-directory: backend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build:edge
+      - uses: supabase/setup-cli@v1
+        if: steps.token.outputs.skip != 'true'
+        with:
+          version: latest
+      - name: Deploy function
+        if: steps.token.outputs.skip != 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy api --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt --use-api

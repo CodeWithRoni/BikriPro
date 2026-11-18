@@ -1,12 +1,12 @@
-const { query, one, transaction } = require('../config/db');
-const { asyncHandler, requireFields, badRequest, notFound, paging, money, today } = require('../utils/http');
-const { logActivity } = require('../utils/activity');
-const { nextNumber } = require('../utils/numbering');
-const { adjustStock } = require('../services/stock.service');
-const { recordTxn, methodFor } = require('../services/accounts.service');
-const loyalty = require('../services/loyalty.service');
-const settings = require('../services/settings.service');
-const { sendSaleSms } = require('../services/sms.service');
+import { query, one, transaction } from '../config/db.js';
+import { asyncHandler, requireFields, badRequest, notFound, paging, money, today } from '../utils/http.js';
+import { logActivity } from '../utils/activity.js';
+import { nextNumber } from '../utils/numbering.js';
+import { adjustStock } from '../services/stock.service.js';
+import { recordTxn, methodFor } from '../services/accounts.service.js';
+import * as loyalty from '../services/loyalty.service.js';
+import * as settings from '../services/settings.service.js';
+import { sendSaleSms } from '../services/sms.service.js';
 
 /**
  * POST /sales — complete a POS invoice.
@@ -18,7 +18,7 @@ const { sendSaleSms } = require('../services/sms.service');
  *   note?, send_sms? (default true), hold_id? (removes the held cart)
  * }
  */
-exports.create = asyncHandler(async (req, res) => {
+export const create = asyncHandler(async (req, res) => {
   const b = req.body;
   if (!Array.isArray(b.items) || !b.items.length) throw badRequest('Cart is empty');
   const cfg = await loyalty.getConfig();
@@ -170,14 +170,14 @@ async function loadSale(id) {
   return sale;
 }
 
-exports.get = asyncHandler(async (req, res) => {
+export const get = asyncHandler(async (req, res) => {
   const sale = await loadSale(req.params.id);
   if (!sale) throw notFound('Invoice not found');
   res.json(sale);
 });
 
 /** GET /sales?from=&to=&q=&customer_id=&due_only=1 */
-exports.list = asyncHandler(async (req, res) => {
+export const list = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query);
   const where = ['1=1'];
   const params = [];
@@ -197,7 +197,7 @@ exports.list = asyncHandler(async (req, res) => {
 });
 
 // ---------- Hold / Held ----------
-exports.hold = asyncHandler(async (req, res) => {
+export const hold = asyncHandler(async (req, res) => {
   const { cart, customer_id = null, note = null } = req.body;
   if (!cart || !Array.isArray(cart.items) || !cart.items.length) throw badRequest('Nothing to hold');
   const total = money(cart.items.reduce((t, i) => t + Number(i.qty) * Number(i.unit_price) - Number(i.discount || 0), 0));
@@ -211,13 +211,13 @@ exports.hold = asyncHandler(async (req, res) => {
   res.status(201).json({ id });
 });
 
-exports.listHeld = asyncHandler(async (req, res) => {
+export const listHeld = asyncHandler(async (req, res) => {
   res.json(await query(
     `SELECT h.id, h.hold_ref, h.item_count, h.total, h.note, h.created_at, h.customer_id, c.name AS customer_name, u.name AS cashier
      FROM held_invoices h LEFT JOIN customers c ON c.id = h.customer_id LEFT JOIN users u ON u.id = h.user_id ORDER BY h.id DESC`));
 });
 
-exports.getHeld = asyncHandler(async (req, res) => {
+export const getHeld = asyncHandler(async (req, res) => {
   const h = await one('SELECT * FROM held_invoices WHERE id = ?', [req.params.id]);
   if (!h) throw notFound('Held invoice not found');
   h.cart = JSON.parse(h.cart_json);
@@ -225,7 +225,7 @@ exports.getHeld = asyncHandler(async (req, res) => {
   res.json(h);
 });
 
-exports.deleteHeld = asyncHandler(async (req, res) => {
+export const deleteHeld = asyncHandler(async (req, res) => {
   await query('DELETE FROM held_invoices WHERE id = ?', [req.params.id]);
   res.json({ message: 'Held invoice removed' });
 });
@@ -235,7 +235,7 @@ exports.deleteHeld = asyncHandler(async (req, res) => {
  * POST /sales/returns { sale_id, items: [{ sale_item_id, qty, restock? }], refund_amount?, account_id?, reason? }
  * The part not refunded in cash reduces the customer's due/balance.
  */
-exports.createReturn = asyncHandler(async (req, res) => {
+export const createReturn = asyncHandler(async (req, res) => {
   requireFields(req.body, ['sale_id', 'items']);
   const b = req.body;
   const result = await transaction(async (conn) => {
@@ -300,7 +300,7 @@ exports.createReturn = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
-exports.listReturns = asyncHandler(async (req, res) => {
+export const listReturns = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query);
   const where = ['1=1'];
   const params = [];
@@ -314,11 +314,11 @@ exports.listReturns = asyncHandler(async (req, res) => {
   res.json({ data: rows, page, limit });
 });
 
-exports.getReturn = asyncHandler(async (req, res) => {
+export const getReturn = asyncHandler(async (req, res) => {
   const r = await one('SELECT r.*, s.invoice_no FROM sale_returns r JOIN sales s ON s.id = r.sale_id WHERE r.id = ?', [req.params.id]);
   if (!r) throw notFound();
   r.items = await query('SELECT ri.*, si.product_name, si.variant_label FROM sale_return_items ri JOIN sale_items si ON si.id = ri.sale_item_id WHERE ri.sale_return_id = ?', [r.id]);
   res.json(r);
 });
 
-exports.loadSale = loadSale;
+export { loadSale as loadSale };

@@ -1,7 +1,11 @@
-const jwt = require('jsonwebtoken');
-const env = require('../config/env');
-const { one } = require('../config/db');
-const { HttpError } = require('../utils/http');
+import jwt from 'jsonwebtoken';
+import env from '../config/env.js';
+import { appSecret } from '../services/settings.service.js';
+
+/** JWT signing key: JWT_SECRET env var, else a random secret kept in the database. */
+const jwtSecret = async () => env.jwtSecret || appSecret('jwt_secret');
+import { one } from '../config/db.js';
+import { HttpError } from '../utils/http.js';
 
 /** Verify Bearer JWT and attach req.user = { id, name, username, role }. */
 async function authenticate(req, res, next) {
@@ -11,7 +15,7 @@ async function authenticate(req, res, next) {
     if (!token) throw new HttpError(401, 'Authentication required');
     let payload;
     try {
-      payload = jwt.verify(token, env.jwtSecret);
+      payload = jwt.verify(token, await jwtSecret());
     } catch {
       throw new HttpError(401, 'Session expired, please log in again');
     }
@@ -36,8 +40,8 @@ const authorize = (minRole) => (req, res, next) => {
   next();
 };
 
-function signToken(user) {
-  return jwt.sign({ sub: user.id, role: user.role }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
+async function signToken(user) {
+  return jwt.sign({ sub: user.id, role: user.role }, await jwtSecret(), { expiresIn: env.jwtExpiresIn });
 }
 
-module.exports = { authenticate, authorize, signToken };
+export { authenticate, authorize, signToken };

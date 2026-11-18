@@ -1,6 +1,6 @@
 # Installing BikriPro at a shop
 
-**Recommended: cloud setup.** Follow [SUPABASE.md](SUPABASE.md) once — the database lives in Supabase and the API on Render, so every device just needs the BikriPro app (or a browser) and internet. Then skip to section 2.
+**Recommended: cloud setup.** Everything already runs on Supabase ([SUPABASE.md](SUPABASE.md)), so every device just needs the BikriPro app (or a browser) and internet. Skip to section 2.
 
 ## 1. Offline option: server PC in the shop
 
@@ -17,12 +17,12 @@ Use this only if the shop has unreliable internet and you want everything on a l
 
 ## 2. Other tills (Windows/macOS/Linux)
 
-Install the same installer. If the build has `BIKRIPRO_API_URL` set it connects to the cloud server automatically; otherwise tap **Server** on the login screen and enter the address (`https://…onrender.com`, or `http://192.168.0.10:5000` for the offline option).
+Install the same installer. It connects to the BikriPro cloud server automatically. For the offline option, tap **Server** on the login screen and enter `http://192.168.0.10:5000`.
 
 ## 3. Android / iPhone / iPad
 
 Install the APK (or the iOS build). If needed, tap **Server** on the login screen and enter the server address.
-Phones can also open the web app in Chrome/Safari (the Render URL, or the GitHub Pages `/app/`) and “Add to Home screen”.
+Phones can also open the web app (GitHub Pages `/app/`) in Chrome/Safari and “Add to Home screen”.
 
 ## 4. Hardware
 
@@ -32,7 +32,7 @@ Phones can also open the web app in Chrome/Safari (the Render URL, or the GitHub
 
 ## 5. SMS
 
-Buy an SMS package from a Bangladeshi gateway and add these environment variables on the server (Render → Environment, or `backend/.env`):
+Buy an SMS package from a Bangladeshi gateway and add these as Edge Function secrets in Supabase (Edge Functions → Secrets), or in `backend/.env` for a self-hosted server:
 
 ```
 SMS_PROVIDER=bulksmsbd          # or "generic" for a JSON POST API

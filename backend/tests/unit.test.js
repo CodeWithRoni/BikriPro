@@ -1,9 +1,9 @@
 // Unit tests that need no database: `npm test`
-const test = require('node:test');
-const assert = require('node:assert');
-const sharp = require('sharp');
-const { normaliseProductImage } = require('../src/services/image.service');
-const { normalisePhone, render } = require('../src/services/sms.service');
+import test from 'node:test';
+import assert from 'node:assert';
+import sharp from 'sharp';
+import { normaliseProductImage } from '../src/services/image.service.js';
+import { normalisePhone, render } from '../src/services/sms.service.js';
 
 test('any image becomes a 500x500 WebP without cropping', async () => {
   for (const [w, h] of [[1800, 600], [300, 1500], [4000, 4000], [120, 80]]) {

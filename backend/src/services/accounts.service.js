@@ -1,4 +1,4 @@
-const { badRequest } = require('../utils/http');
+import { badRequest } from '../utils/http.js';
 
 /** Record money movement in an account (cash book). */
 async function recordTxn(conn, { accountId, direction, amount, refType, refId = null, note = null, date, userId = null }) {
@@ -21,4 +21,4 @@ async function defaultCashAccount(conn) {
 /** Map account type -> payment method enum used on sale_payments. */
 const methodFor = (type) => ({ cash: 'cash', mfs: 'mfs', card: 'card', bank: 'bank' }[type] || 'cash');
 
-module.exports = { recordTxn, defaultCashAccount, methodFor };
+export { recordTxn, defaultCashAccount, methodFor };

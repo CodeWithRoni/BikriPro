@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import api, { fileUrl } from '../api/client';
 import useApi from '../hooks/useApi';
 import { Modal, Field, Spinner } from './ui';
+import { processProductImage, blobName } from '../utils/image';
 
 const newVariant = () => ({ size: '', color: '', sku: '', barcode: '', purchase_price: '', retail_price: '', wholesale_price: '', opening_stock: '', low_stock_alert: 3 });
 
@@ -40,19 +41,19 @@ export default function ProductForm({ open, onClose, onSaved, editId = null }) {
     }
   }, [open, editId]);
 
-  // Show the server-processed 500×500 result as the preview
+  // Normalise on the device: 500×500, trimmed, nothing cropped, compressed.
+  // The preview shows exactly what will be uploaded and stored.
   const pickImage = async (e) => {
     const img = e.target.files?.[0];
+    e.target.value = '';
     if (!img) return;
-    setFile(img);
     setProcessing(true);
     try {
-      const fd = new FormData();
-      fd.append('image', img);
-      const res = await api.post('/products/image-preview', fd, { responseType: 'blob' });
-      setPreview(URL.createObjectURL(res.data));
-    } catch {
-      setPreview(URL.createObjectURL(img));
+      const out = await processProductImage(img);
+      setFile(out.blob);
+      setPreview(out.url);
+    } catch (err) {
+      toast.error(err.message);
     } finally {
       setProcessing(false);
     }
@@ -84,7 +85,7 @@ export default function ProductForm({ open, onClose, onSaved, editId = null }) {
     try {
       const fd = new FormData();
       fd.append('data', JSON.stringify({ ...f, category_id: f.category_id || null, brand_id: f.brand_id || null, variants, remove_image: !preview }));
-      if (file) fd.append('image', file);
+      if (file) fd.append('image', file, blobName(file, 'product'));
       const { data } = editId ? await api.put(`/products/${editId}`, fd) : await api.post('/products', fd);
       toast.success(editId ? 'Product updated' : 'Product created');
       onSaved?.(data);
@@ -103,7 +104,7 @@ export default function ProductForm({ open, onClose, onSaved, editId = null }) {
             {processing && <span className="absolute inset-0 flex items-center justify-center bg-white/70 dark:bg-slate-900/70"><Spinner /></span>}
           </button>
           <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pickImage} />
-          <p className="mt-2 text-center text-[11px] text-slate-400">Any size → auto 500×500, nothing cropped, compressed.</p>
+          <p className="mt-2 text-center text-[11px] text-slate-400">Any size → auto 500×500, nothing cropped, compressed on this device.</p>
           {preview && <button type="button" className="mt-1 w-full text-xs text-rose-500" onClick={() => { setPreview(null); setFile(null); }}>Remove image</button>}
         </div>
 

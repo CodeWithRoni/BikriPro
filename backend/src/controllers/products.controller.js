@@ -1,7 +1,7 @@
-const { query, one, transaction } = require('../config/db');
-const { asyncHandler, requireFields, badRequest, notFound, paging } = require('../utils/http');
-const { logActivity } = require('../utils/activity');
-const { saveProductImage, deleteUpload } = require('../services/image.service');
+import { query, one, transaction } from '../config/db.js';
+import { asyncHandler, requireFields, badRequest, notFound, paging } from '../utils/http.js';
+import { logActivity } from '../utils/activity.js';
+import { saveProductImage, deleteUpload, normaliseProductImage } from '../services/image.service.js';
 
 // ---------- Categories & brands ----------
 const simpleCrud = (table, module) => ({
@@ -26,8 +26,8 @@ const simpleCrud = (table, module) => ({
     res.json({ message: 'Deleted' });
   }),
 });
-exports.categories = simpleCrud('categories', 'categories');
-exports.brands = simpleCrud('brands', 'brands');
+export const categories = simpleCrud('categories', 'categories');
+export const brands = simpleCrud('brands', 'brands');
 
 // ---------- Products ----------
 const VARIANT_COLS = 'v.id AS variant_id, v.sku, v.barcode, v.size, v.color, v.purchase_price, v.retail_price, v.wholesale_price, v.stock_qty, v.low_stock_alert';
@@ -37,7 +37,7 @@ const PRODUCT_COLS = 'p.id AS product_id, p.name, p.image_path, p.is_favorite, p
  * GET /products — variant-level list (one row per sellable SKU).
  * Filters: q (name/sku/barcode), category_id, brand_id, low_stock=1, active
  */
-exports.list = asyncHandler(async (req, res) => {
+export const list = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query, 50);
   const where = ['p.is_active = true', 'v.is_active = true'];
   const params = [];
@@ -58,7 +58,7 @@ exports.list = asyncHandler(async (req, res) => {
 });
 
 /** GET /products/lookup/:code — exact barcode or SKU scan */
-exports.lookup = asyncHandler(async (req, res) => {
+export const lookup = asyncHandler(async (req, res) => {
   const row = await one(
     `SELECT ${PRODUCT_COLS}, ${VARIANT_COLS} FROM product_variants v JOIN products p ON p.id = v.product_id
      LEFT JOIN categories c ON c.id = p.category_id LEFT JOIN brands b ON b.id = p.brand_id
@@ -70,7 +70,7 @@ exports.lookup = asyncHandler(async (req, res) => {
 });
 
 /** GET /products/pos-grid — Recent, Best Selling and Favourite products for the POS */
-exports.posGrid = asyncHandler(async (req, res) => {
+export const posGrid = asyncHandler(async (req, res) => {
   const join = `FROM product_variants v JOIN products p ON p.id = v.product_id
     LEFT JOIN categories c ON c.id = p.category_id LEFT JOIN brands b ON b.id = p.brand_id`;
   const active = 'p.is_active = true AND v.is_active = true';
@@ -91,7 +91,7 @@ exports.posGrid = asyncHandler(async (req, res) => {
   res.json({ recent: recentOut, best_selling: best, favorite });
 });
 
-exports.get = asyncHandler(async (req, res) => {
+export const get = asyncHandler(async (req, res) => {
   const p = await one(`SELECT p.*, c.name AS category, b.name AS brand FROM products p
     LEFT JOIN categories c ON c.id = p.category_id LEFT JOIN brands b ON b.id = p.brand_id WHERE p.id = ?`, [req.params.id]);
   if (!p) throw notFound('Product not found');
@@ -155,7 +155,7 @@ async function upsertVariants(conn, productId, productName, variants, userId) {
   return keepIds;
 }
 
-exports.create = asyncHandler(async (req, res) => {
+export const create = asyncHandler(async (req, res) => {
   const body = parseBody(req);
   requireFields(body, ['name']);
   const variants = Array.isArray(body.variants) && body.variants.length ? body.variants : [{}];
@@ -172,7 +172,7 @@ exports.create = asyncHandler(async (req, res) => {
   res.status(201).json({ id, image_path: imagePath });
 });
 
-exports.update = asyncHandler(async (req, res) => {
+export const update = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const body = parseBody(req);
   const existing = await one('SELECT * FROM products WHERE id = ?', [id]);
@@ -199,22 +199,22 @@ exports.update = asyncHandler(async (req, res) => {
   res.json({ message: 'Product updated', image_path: imagePath });
 });
 
-exports.toggleFavorite = asyncHandler(async (req, res) => {
+export const toggleFavorite = asyncHandler(async (req, res) => {
   await query('UPDATE products SET is_favorite = NOT is_favorite WHERE id = ?', [req.params.id]);
   const p = await one('SELECT is_favorite FROM products WHERE id = ?', [req.params.id]);
   res.json({ is_favorite: p?.is_favorite });
 });
 
-exports.remove = asyncHandler(async (req, res) => {
+export const remove = asyncHandler(async (req, res) => {
   await query('UPDATE products SET is_active = false WHERE id = ?', [req.params.id]);
   await logActivity(req, 'products', 'delete', req.params.id);
   res.json({ message: 'Product archived' });
 });
 
 /** POST /products/image-preview — returns the processed 500x500 image (for testing the engine). */
-exports.imagePreview = asyncHandler(async (req, res) => {
+export const imagePreview = asyncHandler(async (req, res) => {
   if (!req.file) throw badRequest('No image uploaded');
-  const { normaliseProductImage } = require('../services/image.service');
   const out = await normaliseProductImage(req.file.buffer);
+  if (!out) throw badRequest('Image preview runs in the app on this server');
   res.set('Content-Type', 'image/webp').send(out);
 });

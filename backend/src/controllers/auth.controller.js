@@ -1,10 +1,10 @@
-const bcrypt = require('bcryptjs');
-const { query, one } = require('../config/db');
-const { signToken } = require('../middleware/auth');
-const { asyncHandler, requireFields, badRequest, notFound, HttpError } = require('../utils/http');
-const { logActivity } = require('../utils/activity');
+import bcrypt from 'bcryptjs';
+import { query, one } from '../config/db.js';
+import { signToken } from '../middleware/auth.js';
+import { asyncHandler, requireFields, badRequest, notFound, HttpError } from '../utils/http.js';
+import { logActivity } from '../utils/activity.js';
 
-exports.login = asyncHandler(async (req, res) => {
+export const login = asyncHandler(async (req, res) => {
   requireFields(req.body, ['username', 'password']);
   const user = await one('SELECT * FROM users WHERE username = ?', [String(req.body.username).trim()]);
   if (!user || !(await bcrypt.compare(req.body.password, user.password_hash))) {
@@ -15,14 +15,14 @@ exports.login = asyncHandler(async (req, res) => {
   req.user = user;
   await logActivity(req, 'auth', 'login', user.id);
   res.json({
-    token: signToken(user),
+    token: await signToken(user),
     user: { id: user.id, name: user.name, username: user.username, role: user.role },
   });
 });
 
-exports.me = asyncHandler(async (req, res) => res.json({ user: req.user }));
+export const me = asyncHandler(async (req, res) => res.json({ user: req.user }));
 
-exports.changePassword = asyncHandler(async (req, res) => {
+export const changePassword = asyncHandler(async (req, res) => {
   requireFields(req.body, ['current_password', 'new_password']);
   if (String(req.body.new_password).length < 6) throw badRequest('New password must be at least 6 characters');
   const user = await one('SELECT password_hash FROM users WHERE id = ?', [req.user.id]);
@@ -33,11 +33,11 @@ exports.changePassword = asyncHandler(async (req, res) => {
 });
 
 // ---------- User management (admin) ----------
-exports.listUsers = asyncHandler(async (req, res) => {
+export const listUsers = asyncHandler(async (req, res) => {
   res.json(await query('SELECT id, name, username, phone, role, is_active, last_login_at, created_at FROM users ORDER BY id'));
 });
 
-exports.createUser = asyncHandler(async (req, res) => {
+export const createUser = asyncHandler(async (req, res) => {
   requireFields(req.body, ['name', 'username', 'password', 'role']);
   const { name, username, phone = null, password, role } = req.body;
   if (!['admin', 'manager', 'cashier'].includes(role)) throw badRequest('Invalid role');
@@ -48,7 +48,7 @@ exports.createUser = asyncHandler(async (req, res) => {
   res.status(201).json({ id: r.insertId });
 });
 
-exports.updateUser = asyncHandler(async (req, res) => {
+export const updateUser = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const u = await one('SELECT * FROM users WHERE id = ?', [id]);
   if (!u) throw notFound('User not found');

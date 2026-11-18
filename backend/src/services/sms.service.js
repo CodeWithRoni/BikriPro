@@ -6,9 +6,9 @@
  * To plug in a Bangladeshi gateway (BulkSMSBD, SSL Wireless, Alpha SMS…),
  * set SMS_PROVIDER + SMS_API_URL + SMS_API_KEY + SMS_SENDER_ID in .env.
  */
-const env = require('../config/env');
-const { query } = require('../config/db');
-const settings = require('./settings.service');
+import env from '../config/env.js';
+import { query } from '../config/db.js';
+import * as settings from './settings.service.js';
 
 function render(template, vars) {
   return String(template || '').replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined && vars[k] !== null ? vars[k] : ''));
@@ -78,4 +78,4 @@ async function sendSaleSms(sale, customer) {
   return r;
 }
 
-module.exports = { render, normalisePhone, sendSms, sendSaleSms };
+export { render, normalisePhone, sendSms, sendSaleSms };

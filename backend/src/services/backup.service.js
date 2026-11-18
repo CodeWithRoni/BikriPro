@@ -5,7 +5,7 @@
  * same on Windows desktops, shared hosting and Docker):
  *   { app: 'BikriPro', format: 1, exported_at, tables: { users: [...], ... } }
  */
-const { query, transaction } = require('../config/db');
+import { query, transaction } from '../config/db.js';
 
 // Parent tables first so a restore with FK checks on would also work.
 const TABLE_ORDER = [
@@ -22,7 +22,9 @@ const TABLE_ORDER = [
 async function exportAll() {
   const tables = {};
   for (const t of TABLE_ORDER) {
-    tables[t] = [...(await query(`SELECT * FROM "${t}" ORDER BY 1`))];
+    tables[t] = [...(await query(`SELECT * FROM "${t}" ORDER BY 1`))]
+      // never put server signing secrets into a downloadable file
+      .filter((r) => t !== 'settings' || !['jwt_secret', 'cron_secret'].includes(r.setting_key));
   }
   return { app: 'BikriPro', format: 1, exported_at: new Date().toISOString(), tables };
 }
@@ -41,6 +43,8 @@ async function importAll(dump) {
     // All foreign keys are DEFERRABLE: check them once at COMMIT, so tables can
     // be emptied and refilled in any order.
     await conn.query('SET CONSTRAINTS ALL DEFERRED');
+    // keep this server's signing secrets (they are never part of a backup)
+    const keep = await conn.query("SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('jwt_secret','cron_secret')");
     await conn.query(`TRUNCATE ${TABLE_ORDER.map((t) => `"${t}"`).join(', ')} RESTART IDENTITY`);
     for (const t of known) {
       const rows = dump.tables[t];
@@ -52,10 +56,16 @@ async function importAll(dump) {
         const chunk = rows.slice(i, i + 500).map((r) => cols.map((c) => normalise(r[c])));
         await conn.query(`INSERT INTO "${t}" (${colSql}) VALUES ?`, [chunk]);
       }
+      if (t === 'settings') {
+        await conn.query("DELETE FROM settings WHERE setting_key IN ('jwt_secret','cron_secret')");
+      }
       // Move identity counters past the restored ids
       if (cols.includes('id')) {
         await conn.query(`SELECT setval(pg_get_serial_sequence('public.${t}', 'id'), GREATEST((SELECT COALESCE(MAX(id), 0) FROM "${t}"), 1), (SELECT COUNT(*) > 0 FROM "${t}"))`);
       }
+    }
+    for (const k of keep) {
+      await conn.query('INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value', [k.setting_key, k.setting_value]);
     }
   });
   return counts;
@@ -119,4 +129,4 @@ async function resetModules(modules) {
   return run;
 }
 
-module.exports = { exportAll, importAll, resetModules, RESET_MODULES, TABLE_ORDER };
+export { exportAll, importAll, resetModules, RESET_MODULES, TABLE_ORDER };

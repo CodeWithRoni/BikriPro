@@ -1,10 +1,11 @@
-const env = require('./config/env');
-const app = require('./app');
-const { pool } = require('./config/db');
-const { startCron } = require('./services/cron.service');
-const migrate = require('./db/migrate');
-const seed = require('./db/seed');
-const { ensureBucket, useSupabase } = require('./services/storage.service');
+import process from 'node:process';
+import env from './config/env.js';
+import app from './app.js';
+import { pool } from './config/db.js';
+import { startCron } from './services/cron.service.js';
+import migrate from './db/migrate.js';
+import seed from './db/seed.js';
+import { ensureBucket, useSupabase } from './services/storage.service.js';
 
 async function main() {
   // Idempotent: creates the database, missing tables/views and first-run data

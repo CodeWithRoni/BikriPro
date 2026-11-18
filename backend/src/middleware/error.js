@@ -1,4 +1,4 @@
-const env = require('../config/env');
+import env from '../config/env.js';
 
 function notFoundHandler(req, res) {
   res.status(404).json({ message: `Route not found: ${req.method} ${req.originalUrl}` });
@@ -33,4 +33,4 @@ function errorHandler(err, req, res, next) {
   });
 }
 
-module.exports = { notFoundHandler, errorHandler };
+export { notFoundHandler, errorHandler };

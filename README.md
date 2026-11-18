@@ -15,18 +15,18 @@
 
 | Folder | What it is |
 |---|---|
-| `backend/` | Node.js + Express REST API, PostgreSQL (Supabase), JWT roles (Admin / Manager / Cashier), Sharp image engine, cron jobs |
+| `backend/` | Node.js + Express REST API (runs on Supabase Edge Functions or any Node host), PostgreSQL, JWT roles (Admin / Manager / Cashier), Sharp image engine, cron jobs |
 | `frontend/` | React 18 + Tailwind CSS + Redux Toolkit web app (Ocean Blue theme, light/dark, collapsible sidebar). Also contains the Capacitor `android/` and `ios/` projects |
 | `desktop/` | Electron shell + electron-builder config for Windows `.exe`, macOS `.dmg`, Linux `.deb` |
 | `branding/` | Logo and app icons for every platform |
 | `supabase/migrations/` | PostgreSQL schema (applied automatically on start, or with `supabase db push`) |
-| `render.yaml` | One-click Render deployment of the API + web app |
+| `supabase/functions/api/` | Supabase Edge Function wrapper + generated API bundle (`npm run build:edge`) |
 | `docs/` | Supabase/cloud guide, install guide, architecture & API reference, packaging guide |
 | `.github/workflows/build.yml` | One-click CI build of all installers (exe, dmg, deb, apk, ipa) |
 
 ## Quick start
 
-**Cloud (recommended):** Supabase database + Render API + GitHub Pages — follow [`docs/SUPABASE.md`](docs/SUPABASE.md).
+**Cloud (live):** everything runs on Supabase — PostgreSQL, the API as an Edge Function, and photo storage — plus GitHub Pages for the website. See [`docs/SUPABASE.md`](docs/SUPABASE.md).
 
 **Development:** requires **Node.js 18+** and a PostgreSQL database (a Supabase project or a local PostgreSQL 14+).
 
@@ -66,7 +66,7 @@ Single-port production run (API also serves the built web app): `npm start` → 
 15. **Shop Setup / Admin** — shop info & logo, VAT, receipt width, loyalty rates, SMS templates, users & roles, security PIN, **database Export / Import / Reset** (PIN + typed confirmation)
 16. **Activity Log** · 17. **Barcode Labels** (load from the last 10 purchases, choose label fields, A4 sheets or thermal presets / custom mm, live preview) · 18. **Price Manager** (unpriced / missing retail / missing wholesale / below-cost filters, inline edit, bulk markup rules)
 
-Product images of any size are automatically converted on the server to a **500 × 500 WebP** — trimmed, fitted without cropping or stretching, and compressed (typically 2–40 KB) — and stored in Supabase Storage (or on the server's disk when Storage isn't configured).
+Product images of any size are automatically converted on the server to a **500 × 500 WebP** — trimmed, fitted without cropping or stretching, and compressed (typically 2–40 KB) — on the device itself (browser, desktop or phone app) before upload, then stored in Supabase Storage.
 
 ## Building installers
 
@@ -76,7 +76,7 @@ Manual steps for each platform are in [`docs/PACKAGING.md`](docs/PACKAGING.md).
 
 ## Documentation
 
-- [docs/SUPABASE.md](docs/SUPABASE.md) — cloud setup: Supabase database & storage, Render API, app server address
+- [docs/SUPABASE.md](docs/SUPABASE.md) — Supabase setup: database, Edge Function API, storage, birthday cron, deploys
 - [docs/INSTALL.md](docs/INSTALL.md) — installing at a shop (tills, phones, printers, offline server option)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system design, database schema, API routes, business rules
 - [docs/PACKAGING.md](docs/PACKAGING.md) — Electron and Capacitor build guide

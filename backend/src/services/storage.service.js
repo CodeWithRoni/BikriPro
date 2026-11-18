@@ -8,9 +8,9 @@
  *
  * The secret key only ever lives on the server.
  */
-const fs = require('fs/promises');
-const path = require('path');
-const env = require('../config/env');
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import env from '../config/env.js';
 
 const sb = env.supabase;
 const useSupabase = () => Boolean(sb.url && sb.secretKey);
@@ -78,4 +78,4 @@ async function deleteFile(stored) {
   } catch { /* ignore */ }
 }
 
-module.exports = { saveFile, deleteFile, ensureBucket, useSupabase };
+export { saveFile, deleteFile, ensureBucket, useSupabase };

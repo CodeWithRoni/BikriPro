@@ -1,5 +1,5 @@
-const { badRequest } = require('../utils/http');
-const settings = require('./settings.service');
+import { badRequest } from '../utils/http.js';
+import * as settings from './settings.service.js';
 
 /**
  * Change a variant's stock by delta (negative = out). Locks the row so two
@@ -21,4 +21,4 @@ async function adjustStock(conn, variantId, delta, { allowNegative } = {}) {
   return next;
 }
 
-module.exports = { adjustStock };
+export { adjustStock };
