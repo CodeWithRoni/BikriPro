@@ -6,6 +6,8 @@ import { PageLoader } from './components/ui';
 import { canSee, NAV } from './components/layout/nav';
 import Login from './pages/Login';
 
+const ProductSetup = lazy(() => import('./pages/ProductSetup'));
+
 const pages = {
   '/pos': lazy(() => import('./pages/POS')),
   '/dashboard': lazy(() => import('./pages/Dashboard')),
@@ -25,6 +27,7 @@ const pages = {
   '/barcode': lazy(() => import('./pages/BarcodeLabels')),
   '/price-manager': lazy(() => import('./pages/PriceManager')),
   '/products': lazy(() => import('./pages/Products')),
+  '/expenses': lazy(() => import('./pages/Expenses')),
 };
 
 function RequireAuth({ children }) {
@@ -43,6 +46,7 @@ export default function App() {
           const Page = pages[n.to];
           return <Route key={n.to} path={`${n.to}/*`} element={<Suspense fallback={<PageLoader />}><Page /></Suspense>} />;
         })}
+        {canSee(role, 'manager') && <Route path="/product-setup" element={<Suspense fallback={<PageLoader />}><ProductSetup /></Suspense>} />}
         <Route path="*" element={<Navigate to="/pos" replace />} />
       </Route>
     </Routes>

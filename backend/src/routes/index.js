@@ -43,7 +43,12 @@ for (const [path, c] of [['categories', products.categories], ['brands', product
   r.put(`/${path}/:id`, M, c.update);
   r.delete(`/${path}/:id`, M, c.remove);
 }
+r.get('/product-attributes', products.attributes.all);
+r.post('/product-attributes/:kind', M, products.attributes.create);
+r.put('/product-attributes/:kind/:id', M, products.attributes.update);
+r.delete('/product-attributes/:kind/:id', M, products.attributes.remove);
 r.get('/products', products.list);
+r.get('/products/facets', products.facets);
 r.get('/products/pos-grid', products.posGrid);
 r.get('/products/lookup/:code', products.lookup);
 r.post('/products/image-preview', M, imageUpload.single('image'), products.imagePreview);

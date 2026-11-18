@@ -44,7 +44,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
   if (!open) return null;
-  const width = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl' }[size];
+  const width = { sm: 'max-w-md', md: 'max-w-xl', lg: 'max-w-3xl', xl: 'max-w-5xl', '2xl': 'max-w-7xl' }[size];
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div className={cls('flex max-h-[92vh] w-full flex-col rounded-t-3xl bg-white shadow-2xl dark:bg-slate-900 sm:rounded-2xl', width)}>
@@ -69,7 +69,7 @@ export function Field({ label, children, hint, className = '' }) {
   );
 }
 
-export function StatCard({ label, value, icon: Icon, tone = 'ocean', sub }) {
+export function StatCard({ label, value, icon: Icon, tone = 'ocean', sub, onClick }) {
   const tones = {
     ocean: 'bg-ocean-50 text-ocean-600 dark:bg-ocean-900/30 dark:text-ocean-300',
     green: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300',
@@ -77,15 +77,17 @@ export function StatCard({ label, value, icon: Icon, tone = 'ocean', sub }) {
     rose: 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300',
     violet: 'bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-300',
   };
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <div className="card flex items-start gap-3 p-4">
+    <Tag type={onClick ? 'button' : undefined} onClick={onClick} className={cls('card flex items-start gap-3 p-4 text-left', onClick && 'group w-full cursor-pointer transition hover:-translate-y-0.5 hover:border-ocean-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-500 dark:hover:border-ocean-700')}>
       {Icon && <div className={cls('rounded-xl p-2.5', tones[tone])}><Icon className="h-5 w-5" /></div>}
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
         <p className="mt-0.5 truncate text-xl font-bold text-slate-800 dark:text-white">{value}</p>
         {sub && <p className="text-xs text-slate-500">{sub}</p>}
       </div>
-    </div>
+      {onClick && <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-ocean-500" />}
+    </Tag>
   );
 }
 

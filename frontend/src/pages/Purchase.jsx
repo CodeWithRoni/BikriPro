@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PackagePlus, Plus, Trash2, Search, Package, Eye } from 'lucide-react';
+import { PackagePlus, Plus, Trash2, Search, Package, Eye, Phone, History, Wallet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import useApi from '../hooks/useApi';
@@ -8,7 +8,7 @@ import { PartyPicker, ProductPicker, AccountSelect } from '../components/Pickers
 import ProductForm from '../components/ProductForm';
 import PartyForm from '../components/PartyForm';
 import { PageHeader, Tabs, Field, Empty, DateRange, Pagination, Modal, Spinner, Badge, useDebounced } from '../components/ui';
-import { tk, num, todayStr, monthStart, fmtDate, variantLabel } from '../utils/format';
+import { tk, num, todayStr, monthStart, fmtDate, variantLabel, cls } from '../utils/format';
 
 export default function Purchase() {
   const [tab, setTab] = useState('new');
@@ -35,6 +35,15 @@ function NewPurchase({ onDone }) {
   const [busy, setBusy] = useState(false);
   const [newProd, setNewProd] = useState(false);
   const [newSup, setNewSup] = useState(false);
+  const [supInfo, setSupInfo] = useState(null); // fresh balance + stats for the chosen supplier
+
+  useEffect(() => {
+    setSupInfo(null);
+    if (!supplier?.id) return undefined;
+    let live = true;
+    api.get(`/suppliers/${supplier.id}`).then(({ data }) => live && setSupInfo(data)).catch(() => {});
+    return () => { live = false; };
+  }, [supplier?.id]);
 
   const addRow = (p) => setRows((rs) => (rs.some((r) => r.variant_id === p.variant_id)
     ? rs.map((r) => (r.variant_id === p.variant_id ? { ...r, qty: Number(r.qty) + 1 } : r))
@@ -43,6 +52,9 @@ function NewPurchase({ onDone }) {
 
   const subtotal = rows.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.unit_cost) || 0), 0);
   const grand = subtotal - (Number(discount) || 0) + (Number(other) || 0);
+  const prevDue = Number(supInfo?.balance ?? supplier?.balance ?? 0); // > 0: we owe them · < 0: advance paid to them
+  const thisDue = grand - (Number(paid) || 0);
+  const totalDue = prevDue + thisDue;
 
   const onProductCreated = async ({ id }) => {
     const { data } = await api.get(`/products/${id}`);
@@ -67,7 +79,10 @@ function NewPurchase({ onDone }) {
   return (
     <div className="space-y-4">
       <div className="card grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Supplier *" className="lg:col-span-2"><div className="flex gap-2"><div className="flex-1"><PartyPicker type="supplier" value={supplier} onChange={setSupplier} /></div><button type="button" className="btn-secondary px-3" onClick={() => setNewSup(true)}><Plus className="h-4 w-4" /></button></div></Field>
+        <div className="lg:col-span-2">
+          <Field label="Supplier *"><div className="flex gap-2"><div className="min-w-0 flex-1"><PartyPicker type="supplier" value={supplier} onChange={setSupplier} /></div><button type="button" className="btn-secondary px-3" onClick={() => setNewSup(true)} aria-label="New supplier"><Plus className="h-4 w-4" /></button></div></Field>
+          {supplier && <SupplierDueCard supplier={supplier} info={supInfo} due={prevDue} />}
+        </div>
         <Field label="Purchase date"><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         <Field label="Supplier bill no."><input className="input" value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
       </div>
@@ -100,12 +115,47 @@ function NewPurchase({ onDone }) {
         <div className="rounded-xl bg-ocean-50 p-3 dark:bg-ocean-900/30"><p className="text-xs text-slate-500">Grand total</p><p className="text-xl font-bold">{tk(grand)}</p></div>
         <Field label="Paid now"><input type="number" className="input" value={paid} placeholder="0" onChange={(e) => setPaid(e.target.value)} /></Field>
         <Field label="Paid from"><AccountSelect value={account} onChange={setAccount} /></Field>
-        <div className="rounded-xl bg-rose-50 p-3 dark:bg-rose-900/20"><p className="text-xs text-slate-500">Due to supplier</p><p className="text-xl font-bold text-rose-600">{tk(Math.max(grand - (Number(paid) || 0), 0))}</p></div>
+        <div className="rounded-xl bg-rose-50 p-3 dark:bg-rose-900/20">
+          <p className="text-xs text-slate-500">Due to supplier</p>
+          <p className={cls('text-xl font-bold', totalDue > 0 ? 'text-rose-600' : 'text-emerald-600')}>{tk(Math.abs(totalDue))}{totalDue < 0 && <span className="ml-1 text-xs font-semibold">advance</span>}</p>
+          {supplier && (
+            <div className="mt-1.5 space-y-0.5 border-t border-rose-200/70 pt-1.5 text-[11px] text-slate-500 dark:border-rose-900/50">
+              <p className="flex justify-between gap-2"><span>Previous {prevDue < 0 ? 'advance' : 'due'}</span><b className={prevDue > 0 ? 'text-rose-600' : prevDue < 0 ? 'text-emerald-600' : ''}>{prevDue < 0 ? '−' : ''}{tk(Math.abs(prevDue))}</b></p>
+              <p className="flex justify-between gap-2"><span>This purchase {thisDue < 0 ? '(overpaid)' : ''}</span><b>{thisDue < 0 ? '−' : '+'}{tk(Math.abs(thisDue))}</b></p>
+            </div>
+          )}
+        </div>
         <Field label="Note" className="sm:col-span-2 lg:col-span-5"><input className="input" value={note} onChange={(e) => setNote(e.target.value)} /></Field>
         <div className="flex items-end"><button type="button" className="btn-primary w-full" disabled={busy} onClick={save}>{busy && <Spinner className="h-4 w-4 text-white" />} Save purchase</button></div>
       </div>
       <ProductForm open={newProd} onClose={() => setNewProd(false)} onSaved={onProductCreated} />
       <PartyForm type="supplier" open={newSup} onClose={() => setNewSup(false)} onSaved={setSupplier} />
+    </div>
+  );
+}
+
+/** Shown under the supplier search once a supplier is chosen: who they are and what we already owe them. */
+function SupplierDueCard({ supplier, info, due }) {
+  const owe = due > 0;
+  const adv = due < 0;
+  return (
+    <div className={cls('mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border px-3.5 py-2.5',
+      owe ? 'border-rose-200 bg-rose-50/70 dark:border-rose-900/60 dark:bg-rose-950/30'
+        : adv ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/60 dark:bg-emerald-950/30'
+          : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50')}>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold">{supplier.name}{supplier.company ? <span className="font-normal text-slate-500"> · {supplier.company}</span> : null}</p>
+        <p className="flex flex-wrap items-center gap-x-3 text-xs text-slate-500">
+          {supplier.phone && <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{supplier.phone}</span>}
+          {info?.stats && <span className="inline-flex items-center gap-1"><History className="h-3 w-3" />{num(info.stats.invoices)} purchases{info.stats.last_purchase ? ` · last ${fmtDate(info.stats.last_purchase)}` : ''}</span>}
+        </p>
+      </div>
+      <div className="text-right">
+        <p className="flex items-center justify-end gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><Wallet className="h-3 w-3" />{adv ? 'Advance with supplier' : 'Previous due'}</p>
+        <p className={cls('text-lg font-extrabold leading-tight', owe ? 'text-rose-600' : adv ? 'text-emerald-600' : 'text-slate-700 dark:text-slate-200')}>
+          {info === null && supplier.balance === undefined ? '…' : due === 0 ? 'No due' : tk(Math.abs(due))}
+        </p>
+      </div>
     </div>
   );
 }

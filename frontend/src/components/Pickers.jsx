@@ -42,11 +42,13 @@ export function PartyPicker({ type = 'customer', value, onChange, placeholder, a
       </div>
       {open && (
         <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-          {list.length === 0 && <p className="px-4 py-3 text-sm text-slate-500">No match</p>}
+          {list.length === 0 && <p className="px-4 py-3 text-sm text-slate-500">{q ? 'No match' : `No ${type}s yet — use + to add one`}</p>}
           {list.map((p) => (
             <button type="button" key={p.id} onClick={() => { onChange(p); setOpen(false); }} className="flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-sm hover:bg-ocean-50 dark:hover:bg-slate-800">
               <span className="min-w-0"><span className="block truncate font-medium">{p.name}</span><span className="text-xs text-slate-500">{p.phone || p.company || p.address || ''}</span></span>
-              {Number(p.balance) !== 0 && <span className={cls('text-xs font-semibold', p.balance > 0 ? 'text-rose-600' : 'text-emerald-600')}>{tk(p.balance)}</span>}
+              {Number(p.balance) !== 0
+                ? <span className={cls('shrink-0 text-right text-xs font-semibold', p.balance > 0 ? 'text-rose-600' : 'text-emerald-600')}><span className="block text-[10px] font-medium uppercase text-slate-400">{p.balance > 0 ? (type === 'supplier' ? 'Due' : 'Owes') : 'Advance'}</span>{tk(Math.abs(p.balance))}</span>
+                : type === 'supplier' && <span className="shrink-0 text-[11px] text-slate-400">No due</span>}
             </button>
           ))}
         </div>

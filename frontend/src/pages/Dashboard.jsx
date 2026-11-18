@@ -48,8 +48,8 @@ export default function Dashboard() {
         <StatCard icon={TrendingUp} tone="green" label="Today's gross profit" value={tk(d.today.gross_profit)} />
         <StatCard icon={HandCoins} tone="violet" label="Today's collection" value={tk(d.today.collections)} sub={`Expenses ${tk(d.today.expenses)}`} />
         <StatCard icon={ShoppingBag} tone="ocean" label="This month" value={tk(d.month.amount)} sub={`${d.month.invoices} invoices`} />
-        <StatCard icon={Wallet} tone="rose" label="Receivable (customers)" value={tk(d.receivable.amount)} sub={`${d.receivable.customers || 0} customers owe`} />
-        <StatCard icon={Wallet} tone="amber" label="Payable (suppliers)" value={tk(d.payable)} />
+        <StatCard onClick={() => navigate('/collection')} icon={Wallet} tone="rose" label="Receivable (customers)" value={tk(d.receivable.amount)} sub={`${d.receivable.customers || 0} customers owe`} />
+        <StatCard onClick={() => navigate('/payment')} icon={Wallet} tone="amber" label="Payable (suppliers)" value={tk(d.payable)} sub="Click to pay suppliers" />
         <StatCard icon={Boxes} label="Stock value" value={tk(d.stock.value)} sub={`${num(d.stock.qty)} pcs · ${d.stock.skus} SKUs`} />
         <StatCard icon={Gift} tone="violet" label="Loyalty points" value={num(d.loyalty.outstanding_points)} sub={`${d.loyalty.members || 0} members`} />
       </div>

@@ -23,7 +23,7 @@ export default function AppLayout() {
   const [pwOpen, setPwOpen] = useState(false);
   const menuRef = useRef(null);
 
-  const current = NAV.find((n) => pathname.startsWith(n.to));
+  const current = pathname.startsWith('/product-setup') ? { label: 'Product Setup' } : NAV.find((n) => pathname.startsWith(n.to));
 
   useEffect(() => {
     api.get('/settings').then((r) => dispatch(settingsLoaded(r.data))).catch(() => {});

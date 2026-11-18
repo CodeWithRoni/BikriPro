@@ -10,7 +10,7 @@ import { query, transaction } from '../config/db.js';
 // Parent tables first so a restore with FK checks on would also work.
 const TABLE_ORDER = [
   'users', 'settings', 'number_sequences', 'accounts',
-  'categories', 'brands', 'products', 'product_variants', 'price_history',
+  'categories', 'brands', 'product_attributes', 'products', 'product_variants', 'price_history',
   'customers', 'customer_contacts', 'suppliers', 'supplier_contacts',
   'expense_categories',
   'sales', 'sale_items', 'sale_payments', 'held_invoices', 'sale_returns', 'sale_return_items',
@@ -45,7 +45,9 @@ async function importAll(dump) {
     await conn.query('SET CONSTRAINTS ALL DEFERRED');
     // keep this server's signing secrets (they are never part of a backup)
     const keep = await conn.query("SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('jwt_secret','cron_secret')");
-    await conn.query(`TRUNCATE ${TABLE_ORDER.map((t) => `"${t}"`).join(', ')} RESTART IDENTITY`);
+    // Backups made before Product Setup existed have no product_attributes: keep the current ones.
+    const clear = TABLE_ORDER.filter((t) => t !== 'product_attributes' || known.includes(t));
+    await conn.query(`TRUNCATE ${clear.map((t) => `"${t}"`).join(', ')} RESTART IDENTITY`);
     for (const t of known) {
       const rows = dump.tables[t];
       counts[t] = rows.length;

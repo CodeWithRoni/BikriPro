@@ -31,7 +31,7 @@ export default function Settings() {
 
   return (
     <div>
-      <PageHeader icon={SettingsIcon} title="Shop Setup / Admin Settings" />
+      <PageHeader icon={SettingsIcon} title="Shop Setup" />
       <Tabs tabs={TABS} value={tab} onChange={setTab} />
       {tab === 'shop' && <ShopInfo s={s} bind={bind} toggle={toggle} save={save} onLogo={reload} />}
       {tab === 'loyalty' && (

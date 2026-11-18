@@ -3,31 +3,125 @@ import { asyncHandler, requireFields, badRequest, notFound, paging } from '../ut
 import { logActivity } from '../utils/activity.js';
 import { saveProductImage, deleteUpload, normaliseProductImage } from '../services/image.service.js';
 
-// ---------- Categories & brands ----------
-const simpleCrud = (table, module) => ({
+// ---------- Categories (with sub-categories) & brands ----------
+const clean = (v) => (v === undefined || v === null ? null : String(v).trim() || null);
+const dupe = (e, what) => {
+  if (e?.code === '23505') throw badRequest(`${what} already exists`);
+  throw e;
+};
+
+export const categories = {
+  /** Flat list; parent_id = null for main categories. ?parent=main|sub|<id> */
   list: asyncHandler(async (req, res) => {
-    res.json(await query(`SELECT t.*, (SELECT COUNT(*) FROM products p WHERE p.${table === 'categories' ? 'category_id' : 'brand_id'} = t.id) AS product_count FROM ${table} t ORDER BY t.name`));
+    const where = [];
+    const params = [];
+    if (req.query.parent === 'main') where.push('t.parent_id IS NULL');
+    else if (req.query.parent === 'sub') where.push('t.parent_id IS NOT NULL');
+    else if (req.query.parent) { where.push('t.parent_id = ?'); params.push(req.query.parent); }
+    res.json(await query(
+      `SELECT t.*, pc.name AS parent_name,
+        (SELECT COUNT(*) FROM products p WHERE p.category_id = t.id AND p.is_active) AS product_count,
+        (SELECT COUNT(*) FROM categories s WHERE s.parent_id = t.id) AS sub_count
+       FROM categories t LEFT JOIN categories pc ON pc.id = t.parent_id
+       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       ORDER BY COALESCE(pc.name, t.name), t.parent_id NULLS FIRST, t.name`, params));
   }),
   create: asyncHandler(async (req, res) => {
     requireFields(req.body, ['name']);
-    const r = await query(`INSERT INTO ${table} (name) VALUES (?)`, [req.body.name.trim()]);
-    await logActivity(req, module, 'create', r.insertId, req.body.name);
+    const name = req.body.name.trim();
+    const parentId = req.body.parent_id || null;
+    if (parentId && (await one('SELECT parent_id FROM categories WHERE id = ?', [parentId]))?.parent_id) throw badRequest('A sub-category cannot have its own sub-category');
+    const r = await query('INSERT INTO categories (name, parent_id) VALUES (?, ?)', [name, parentId]).catch((e) => dupe(e, 'This category'));
+    await logActivity(req, 'categories', 'create', r.insertId, name);
+    res.status(201).json({ id: r.insertId, name, parent_id: parentId });
+  }),
+  update: asyncHandler(async (req, res) => {
+    requireFields(req.body, ['name']);
+    const parentId = req.body.parent_id || null;
+    if (parentId && Number(parentId) === Number(req.params.id)) throw badRequest('A category cannot be its own parent');
+    if (parentId && (await one('SELECT COUNT(*) AS n FROM categories WHERE parent_id = ?', [req.params.id])).n > 0) throw badRequest('This category has sub-categories, so it must stay a main category');
+    await query('UPDATE categories SET name = ?, parent_id = ? WHERE id = ?', [req.body.name.trim(), parentId, req.params.id]).catch((e) => dupe(e, 'This category'));
+    await logActivity(req, 'categories', 'update', req.params.id, req.body.name);
+    res.json({ message: 'Updated' });
+  }),
+  remove: asyncHandler(async (req, res) => {
+    await query('DELETE FROM categories WHERE id = ?', [req.params.id]); // products & sub-categories → set null (FK)
+    await logActivity(req, 'categories', 'delete', req.params.id);
+    res.json({ message: 'Deleted' });
+  }),
+};
+
+export const brands = {
+  list: asyncHandler(async (req, res) => {
+    res.json(await query('SELECT t.*, (SELECT COUNT(*) FROM products p WHERE p.brand_id = t.id AND p.is_active) AS product_count FROM brands t ORDER BY t.name'));
+  }),
+  create: asyncHandler(async (req, res) => {
+    requireFields(req.body, ['name']);
+    const r = await query('INSERT INTO brands (name) VALUES (?)', [req.body.name.trim()]).catch((e) => dupe(e, 'This brand'));
+    await logActivity(req, 'brands', 'create', r.insertId, req.body.name);
     res.status(201).json({ id: r.insertId, name: req.body.name.trim() });
   }),
   update: asyncHandler(async (req, res) => {
     requireFields(req.body, ['name']);
-    await query(`UPDATE ${table} SET name=? WHERE id=?`, [req.body.name.trim(), req.params.id]);
-    await logActivity(req, module, 'update', req.params.id, req.body.name);
+    await query('UPDATE brands SET name = ? WHERE id = ?', [req.body.name.trim(), req.params.id]).catch((e) => dupe(e, 'This brand'));
+    await logActivity(req, 'brands', 'update', req.params.id, req.body.name);
     res.json({ message: 'Updated' });
   }),
   remove: asyncHandler(async (req, res) => {
-    await query(`DELETE FROM ${table} WHERE id=?`, [req.params.id]);
-    await logActivity(req, module, 'delete', req.params.id);
+    await query('DELETE FROM brands WHERE id = ?', [req.params.id]);
+    await logActivity(req, 'brands', 'delete', req.params.id);
     res.json({ message: 'Deleted' });
   }),
-});
-export const categories = simpleCrud('categories', 'categories');
-export const brands = simpleCrud('brands', 'brands');
+};
+
+// ---------- Product Setup: unit types, colours, sizes, variation sets ----------
+const KINDS = ['unit', 'color', 'size', 'variation'];
+const kindOf = (k) => {
+  if (!KINDS.includes(k)) throw badRequest('Unknown setup type');
+  return k;
+};
+const normValue = (kind, v) => {
+  const s = clean(v);
+  if (!s) return null;
+  if (kind === 'color') return /^#[0-9a-f]{6}$/i.test(s) ? s.toLowerCase() : null;
+  if (kind === 'variation') return s.split(',').map((x) => x.trim()).filter(Boolean).join(', ') || null;
+  return s.slice(0, 20);
+};
+
+export const attributes = {
+  /** GET /product-attributes → { unit: [...], color: [...], size: [...], variation: [...] } */
+  all: asyncHandler(async (req, res) => {
+    const rows = await query('SELECT id, kind, name, value, sort_order FROM product_attributes ORDER BY kind, sort_order, id');
+    const out = Object.fromEntries(KINDS.map((k) => [k, []]));
+    for (const r of rows) out[r.kind].push(r);
+    res.json(out);
+  }),
+  create: asyncHandler(async (req, res) => {
+    const kind = kindOf(req.params.kind);
+    requireFields(req.body, ['name']);
+    if (kind === 'variation' && !normValue(kind, req.body.value)) throw badRequest('Enter the values, e.g. S, M, L, XL');
+    const [{ next }] = await query('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM product_attributes WHERE kind = ?', [kind]);
+    const r = await query('INSERT INTO product_attributes (kind, name, value, sort_order) VALUES (?, ?, ?, ?)',
+      [kind, req.body.name.trim(), normValue(kind, req.body.value), next]).catch((e) => dupe(e, `"${req.body.name.trim()}"`));
+    await logActivity(req, 'product_setup', 'create', r.insertId, `${kind}: ${req.body.name}`);
+    res.status(201).json({ id: r.insertId });
+  }),
+  update: asyncHandler(async (req, res) => {
+    const kind = kindOf(req.params.kind);
+    requireFields(req.body, ['name']);
+    if (kind === 'variation' && !normValue(kind, req.body.value)) throw badRequest('Enter the values, e.g. S, M, L, XL');
+    await query('UPDATE product_attributes SET name = ?, value = ? WHERE id = ? AND kind = ?',
+      [req.body.name.trim(), normValue(kind, req.body.value), req.params.id, kind]).catch((e) => dupe(e, `"${req.body.name.trim()}"`));
+    await logActivity(req, 'product_setup', 'update', req.params.id, `${kind}: ${req.body.name}`);
+    res.json({ message: 'Updated' });
+  }),
+  remove: asyncHandler(async (req, res) => {
+    const kind = kindOf(req.params.kind);
+    await query('DELETE FROM product_attributes WHERE id = ? AND kind = ?', [req.params.id, kind]);
+    await logActivity(req, 'product_setup', 'delete', req.params.id, kind);
+    res.json({ message: 'Deleted' });
+  }),
+};
 
 // ---------- Products ----------
 const VARIANT_COLS = 'v.id AS variant_id, v.sku, v.barcode, v.size, v.color, v.purchase_price, v.retail_price, v.wholesale_price, v.stock_qty, v.low_stock_alert';
@@ -39,22 +133,57 @@ const PRODUCT_COLS = 'p.id AS product_id, p.name, p.image_path, p.is_favorite, p
  */
 export const list = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query, 50);
+  const qs = req.query;
   const where = ['p.is_active = true', 'v.is_active = true'];
   const params = [];
-  if (req.query.q) {
+  const many = (v) => String(v).split(',').map((x) => x.trim()).filter(Boolean);
+  if (qs.q) {
     where.push('(p.name ILIKE ? OR v.sku ILIKE ? OR v.barcode = ? OR b.name ILIKE ?)');
-    const like = `%${req.query.q}%`;
-    params.push(like, like, req.query.q, like);
+    const like = `%${qs.q}%`;
+    params.push(like, like, qs.q, like);
   }
-  if (req.query.category_id) { where.push('p.category_id = ?'); params.push(req.query.category_id); }
-  if (req.query.brand_id) { where.push('p.brand_id = ?'); params.push(req.query.brand_id); }
-  if (req.query.low_stock === '1') where.push('v.stock_qty <= v.low_stock_alert');
+  // A main category also matches products filed under its sub-categories
+  if (qs.subcategory_id) { where.push('p.category_id = ?'); params.push(qs.subcategory_id); }
+  else if (qs.category_id) { where.push('p.category_id IN (SELECT id FROM categories WHERE id = ? OR parent_id = ?)'); params.push(qs.category_id, qs.category_id); }
+  if (qs.brand_id) { where.push('p.brand_id = ?'); params.push(qs.brand_id); }
+  if (qs.size) { where.push('v.size IN (?)'); params.push(many(qs.size)); }
+  if (qs.color) { where.push('v.color IN (?)'); params.push(many(qs.color)); }
+  if (qs.unit) { where.push('p.unit = ?'); params.push(qs.unit); }
+  const stock = qs.stock || (qs.low_stock === '1' ? 'alert' : '');
+  if (stock === 'alert') where.push('v.stock_qty <= v.low_stock_alert'); // legacy low_stock=1: low or out
+  else if (stock === 'in') where.push('v.stock_qty > v.low_stock_alert');
+  else if (stock === 'low') where.push('v.stock_qty > 0 AND v.stock_qty <= v.low_stock_alert');
+  else if (stock === 'out') where.push('v.stock_qty <= 0');
+  if (qs.price === 'unset') where.push('v.retail_price IS NULL');
+  if (qs.min_price !== undefined && qs.min_price !== '') { where.push('v.retail_price >= ?'); params.push(Number(qs.min_price)); }
+  if (qs.max_price !== undefined && qs.max_price !== '') { where.push('v.retail_price <= ?'); params.push(Number(qs.max_price)); }
+  if (qs.favorite === '1') where.push('p.is_favorite = true');
+  const SORTS = {
+    name: 'p.name, v.size, v.color', newest: 'v.id DESC', price_asc: 'v.retail_price ASC NULLS LAST, p.name',
+    price_desc: 'v.retail_price DESC NULLS LAST, p.name', stock_asc: 'v.stock_qty ASC, p.name', stock_desc: 'v.stock_qty DESC, p.name',
+  };
+  const order = SORTS[qs.sort] || SORTS.name;
   const base = `FROM product_variants v JOIN products p ON p.id = v.product_id
     LEFT JOIN categories c ON c.id = p.category_id LEFT JOIN brands b ON b.id = p.brand_id
     WHERE ${where.join(' AND ')}`;
-  const [{ total }] = await query(`SELECT COUNT(*) AS total ${base}`, params);
-  const rows = await query(`SELECT ${PRODUCT_COLS}, ${VARIANT_COLS} ${base} ORDER BY p.name, v.size, v.color LIMIT ? OFFSET ?`, [...params, limit, offset]);
-  res.json({ data: rows, total, page, limit });
+  const [summary] = await query(`SELECT COUNT(*) AS total, COUNT(DISTINCT p.id) AS products,
+      COALESCE(SUM(GREATEST(v.stock_qty, 0)), 0) AS stock_qty,
+      COALESCE(SUM(GREATEST(v.stock_qty, 0) * v.purchase_price), 0) AS stock_value ${base}`, params);
+  const rows = await query(`SELECT ${PRODUCT_COLS}, pc.name AS parent_category, ${VARIANT_COLS} ${base.replace('LEFT JOIN brands b', 'LEFT JOIN categories pc ON pc.id = c.parent_id LEFT JOIN brands b')} ORDER BY ${order} LIMIT ? OFFSET ?`, [...params, limit, offset]);
+  res.json({ data: rows, total: summary.total, page, limit, summary });
+});
+
+/** GET /products/facets — values in use, for the filter bar */
+export const facets = asyncHandler(async (req, res) => {
+  const [sizes, colors, price] = await Promise.all([
+    query(`SELECT v.size AS name, COUNT(*) AS n FROM product_variants v JOIN products p ON p.id = v.product_id
+      WHERE p.is_active AND v.is_active AND COALESCE(v.size, '') <> '' GROUP BY v.size ORDER BY v.size`),
+    query(`SELECT v.color AS name, COUNT(*) AS n FROM product_variants v JOIN products p ON p.id = v.product_id
+      WHERE p.is_active AND v.is_active AND COALESCE(v.color, '') <> '' GROUP BY v.color ORDER BY v.color`),
+    one(`SELECT COALESCE(MIN(v.retail_price), 0) AS min, COALESCE(MAX(v.retail_price), 0) AS max FROM product_variants v
+      JOIN products p ON p.id = v.product_id WHERE p.is_active AND v.is_active`),
+  ]);
+  res.json({ sizes, colors, price });
 });
 
 /** GET /products/lookup/:code — exact barcode or SKU scan */

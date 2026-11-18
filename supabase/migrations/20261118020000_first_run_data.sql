@@ -23,9 +23,10 @@ insert into public.expense_categories (name)
 values ('Shop Rent'), ('Electricity'), ('Staff Salary'), ('Transport'), ('Snacks & Tea'), ('Internet & Mobile'), ('Others')
 on conflict (name) do nothing;
 
+-- (no ON CONFLICT: category names are unique per parent since the Product Setup migration)
 insert into public.categories (name)
-values ('Shirt'), ('T-Shirt'), ('Polo'), ('Panjabi'), ('Pant'), ('Jeans'), ('Saree'), ('Three-Piece'), ('Kurti'), ('Kids Wear'), ('Accessories')
-on conflict (name) do nothing;
+select v.name from (values ('Shirt'), ('T-Shirt'), ('Polo'), ('Panjabi'), ('Pant'), ('Jeans'), ('Saree'), ('Three-Piece'), ('Kurti'), ('Kids Wear'), ('Accessories')) as v(name)
+where not exists (select 1 from public.categories c where c.parent_id is null and lower(c.name) = lower(v.name));
 
 -- Public image bucket (exists only on Supabase; skipped elsewhere)
 do $$

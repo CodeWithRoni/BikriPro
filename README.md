@@ -54,17 +54,18 @@ Single-port production run (API also serves the built web app): `npm start` → 
 ## Feature map (side menu order)
 
 1. **Point of Sale** — barcode scan / search, Hold & Held invoices, Recent / Best-selling / Favourite grid, quick customer add, split payments (Cash, bKash, Nagad, Card, Bank), loose-change waiver, loyalty redemption, **credit sale with Next Payment Date** (3 days / 7 days / 1 month / custom), Complete & Print · Complete · Clear, keyboard shortcuts (F2 search, F8 hold, F9 complete, F10 complete & print)
-2. **Dashboard** — **Due Collection Reminders** (appear automatically when a due date arrives), today/month figures, receivable & payable, stock value, low stock, best sellers, loyalty, birthdays
+2. **Dashboard** — **Due Collection Reminders** (appear automatically when a due date arrives), today/month figures, receivable & payable (click to open Collection / Payment), stock value, low stock, best sellers, loyalty, birthdays
 3. **Sales** · 4. **Sales Return** (restock, refund or credit to due, loyalty reversal)
-5. **Purchase** (stock in, latest cost, set new MRP from the purchase) · 6. **Purchase Return**
+5. **Purchase** (stock in, latest cost, set new MRP from the purchase, supplier's previous due shown on selection) · 6. **Purchase Return**
 7. **Customers** · 8. **Suppliers** — separate menus, dynamic “Add another” contact fields, optional DOB, ledgers filterable by date / transaction type / area, ledger adjustments (customer round-off waivers, supplier rebates & commissions)
 9. **Payment** (to suppliers) · 10. **Collection** (from credit customers, with waiver & rescheduling)
-11. **Products** — catalogue, size/colour variants, SKU & barcode, photos (auto 500×500), low-stock filter
-12. **Cash, Bank & MFS Setup** — accounts, statements, transfers, deposits/withdrawals, expenses
-13. **Profit** — net sales, COGS, gross margin, expenses, net profit, by category
-14. **Report Hub** — 11 reports, CSV export, print
-15. **Shop Setup / Admin** — shop info & logo, VAT, receipt width, loyalty rates, SMS templates, users & roles, security PIN, **database Export / Import / Reset** (PIN + typed confirmation)
+11. **Products** — catalogue, size/colour variants, SKU & barcode, photos (auto 500×500), professional filter bar (category / sub-category / brand / unit / size / colour / stock status / price range / sort, active-filter chips, result count & stock value) · **Product Setup** page: Category, Sub Category, Brand, Unit Type, Size, Color and Variation sets, used as drop-downs and one-tap chips in the product form
+12. **Cash, Bank & MFS** — accounts, statements, transfers, deposits/withdrawals
+13. **Expenses** — shop costs by category, paid from any account
+14. **Profit** — net sales, COGS, gross margin, expenses, net profit, by category
+15. **Report Hub** — 11 reports, CSV export, print
 16. **Activity Log** · 17. **Barcode Labels** (load from the last 10 purchases, choose label fields, A4 sheets or thermal presets / custom mm, live preview) · 18. **Price Manager** (unpriced / missing retail / missing wholesale / below-cost filters, inline edit, bulk markup rules)
+19. **Shop Setup** (admin, last in the menu) — shop info & logo, VAT, receipt width, loyalty rates, SMS templates, users & roles, security PIN, **database Export / Import / Reset** (PIN + typed confirmation)
 
 Product images of any size are automatically converted on the server to a **500 × 500 WebP** — trimmed, fitted without cropping or stretching, and compressed (typically 2–40 KB) — on the device itself (browser, desktop or phone app) before upload, then stored in Supabase Storage.
 

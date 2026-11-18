@@ -33,7 +33,7 @@ async function seed({ demo = process.argv.includes('--demo') } = {}) {
     await q('INSERT INTO expense_categories (name) VALUES (?) ON CONFLICT (name) DO NOTHING', [n]);
   }
   for (const n of ['Shirt', 'T-Shirt', 'Polo', 'Panjabi', 'Pant', 'Jeans', 'Saree', 'Three-Piece', 'Kurti', 'Kids Wear', 'Accessories']) {
-    await q('INSERT INTO categories (name) VALUES (?) ON CONFLICT (name) DO NOTHING', [n]);
+    await q('INSERT INTO categories (name) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM categories WHERE parent_id IS NULL AND lower(name) = lower(?))', [n, n]);
   }
 
   if (demo) {
