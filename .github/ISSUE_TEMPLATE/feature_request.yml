@@ -1,0 +1,20 @@
+name: ✨ Feature request / নতুন ফিচার
+description: Suggest an idea for BikriPro
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve for the shop? / দোকানের কোন কাজ সহজ হবে?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea / আপনার প্রস্তাব
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else (screenshots, examples) / অন্য কিছু

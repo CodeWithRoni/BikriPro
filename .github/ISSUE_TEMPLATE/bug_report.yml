@@ -1,0 +1,46 @@
+name: 🐞 Bug report / সমস্যা জানান
+description: Something in BikriPro is not working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please **don't** paste passwords, PINs, API keys or customer phone numbers here.
+        ধন্যবাদ! পাসওয়ার্ড, PIN, API key বা কাস্টমারের ফোন নম্বর এখানে দেবেন না।
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Where does it happen? / কোথায় হচ্ছে?
+      multiple: true
+      options: [Web app, Windows, macOS, Linux, Android, iPhone / iPad]
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: Module / মেনু
+      options: [Point of Sale (POS), Dashboard, Sales, Sales Return, Purchase, Purchase Return, Customers, Suppliers, Payment, Collection, Products, "Cash, Bank & MFS", Profit, Report Hub, Shop Setup / Admin, Activity Log, Barcode Labels, Price Manager, Login / other]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / কীভাবে হলো
+      placeholder: "1. Open POS\n2. Add a product\n3. Click Complete & Print\n4. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect, and what happened? / কী হওয়ার কথা ছিল, কী হলো
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or error message / স্ক্রিনশট বা error
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      placeholder: e.g. 1.0.0

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📘 Setup & install guide
+    url: https://github.com/CodeWithRoni/BikriPro/blob/main/docs/SUPABASE.md
+    about: How BikriPro runs on Supabase, deploys and first login
+  - name: 🌐 BikriPro website
+    url: https://codewithroni.github.io/BikriPro/
+    about: Features, screenshots and downloads
