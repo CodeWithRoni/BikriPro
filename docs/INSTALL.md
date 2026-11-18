@@ -1,33 +1,28 @@
 # Installing BikriPro at a shop
 
-A typical shop has **one server PC** (keeps the database) and any number of tills, tablets and phones that connect to it over the shop's Wi-Fi/LAN.
+**Recommended: cloud setup.** Follow [SUPABASE.md](SUPABASE.md) once — the database lives in Supabase and the API on Render, so every device just needs the BikriPro app (or a browser) and internet. Then skip to section 2.
 
-## 1. Server PC (Windows)
+## 1. Offline option: server PC in the shop
 
-1. **Install MySQL or MariaDB**
-   - Easiest: [MariaDB for Windows](https://mariadb.org/download/) (MSI). During setup choose a root password and tick “Run as a service”.
-2. **Create the database user** (open “MySQL Client” / HeidiSQL and run):
-   ```sql
-   CREATE DATABASE bikripro CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-   CREATE USER 'bikripro'@'localhost' IDENTIFIED BY 'choose-a-strong-password';
-   GRANT ALL ON bikripro.* TO 'bikripro'@'localhost';
-   FLUSH PRIVILEGES;
-   ```
-3. **Install BikriPro** (`BikriPro-Setup-x.y.z.exe`) and open it once. It creates its settings file.
-4. In BikriPro choose **File → Server settings…** and set `DB_PASSWORD` (and `DB_USER` if different). Save, then **File → Restart server**.
-5. On start the server creates all tables and the first admin user automatically (and safely skips this on later starts).
+Use this only if the shop has unreliable internet and you want everything on a local PC.
+
+1. Install **PostgreSQL 16** for Windows from postgresql.org (remember the `postgres` password).
+2. Create a database named `bikripro` (pgAdmin → Databases → Create).
+3. Install BikriPro (`BikriPro-Setup-x.y.z.exe`) and open it once.
+4. **File → Server settings…**: set `EMBEDDED_SERVER=1` and
+   `DATABASE_URL=postgresql://postgres:YOUR-PASSWORD@127.0.0.1:5432/bikripro`. Save, then **File → Restart server**.
+5. On start the server creates all tables and the first admin user automatically.
 6. Sign in with **admin / admin123**, then immediately change the password and the security PIN (default **1234**).
-7. Allow port **5000** through Windows Firewall (Private networks) so other devices can connect.
-8. Find the PC's IP address (`ipconfig` → IPv4, e.g. `192.168.0.10`). Give it a fixed IP in your router so it never changes.
+7. Allow port **5000** through Windows Firewall (Private networks) so other devices can connect, and give the PC a fixed IP in your router (e.g. `192.168.0.10`).
 
 ## 2. Other tills (Windows/macOS/Linux)
 
-Install the same installer. In **File → Server settings…** set `EMBEDDED_SERVER=0`, restart the app, then on the login screen tap **Server** and enter `http://192.168.0.10:5000`.
+Install the same installer. If the build has `BIKRIPRO_API_URL` set it connects to the cloud server automatically; otherwise tap **Server** on the login screen and enter the address (`https://…onrender.com`, or `http://192.168.0.10:5000` for the offline option).
 
 ## 3. Android / iPhone / iPad
 
-Install the APK (or the iOS build), open it, tap **Server** on the login screen and enter `http://192.168.0.10:5000`.
-Phones on the same Wi-Fi can also simply open `http://192.168.0.10:5000` in Chrome/Safari and “Add to Home screen”.
+Install the APK (or the iOS build). If needed, tap **Server** on the login screen and enter the server address.
+Phones can also open the web app in Chrome/Safari (the Render URL, or the GitHub Pages `/app/`) and “Add to Home screen”.
 
 ## 4. Hardware
 
@@ -37,7 +32,7 @@ Phones on the same Wi-Fi can also simply open `http://192.168.0.10:5000` in Chro
 
 ## 5. SMS
 
-Buy an SMS package from a Bangladeshi gateway and fill in `backend/.env` (or the desktop server settings):
+Buy an SMS package from a Bangladeshi gateway and add these environment variables on the server (Render → Environment, or `backend/.env`):
 
 ```
 SMS_PROVIDER=bulksmsbd          # or "generic" for a JSON POST API

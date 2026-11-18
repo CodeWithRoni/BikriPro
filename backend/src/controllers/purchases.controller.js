@@ -19,7 +19,7 @@ exports.create = asyncHandler(async (req, res) => {
   if (!Array.isArray(b.items) || !b.items.length) throw badRequest('Add at least one item');
 
   const result = await transaction(async (conn) => {
-    const supplier = await conn.one('SELECT id FROM suppliers WHERE id = ? AND is_active = 1', [b.supplier_id]);
+    const supplier = await conn.one('SELECT id FROM suppliers WHERE id = ? AND is_active = true', [b.supplier_id]);
     if (!supplier) throw badRequest('Supplier not found');
     const lines = [];
     for (const it of b.items) {
@@ -102,7 +102,7 @@ exports.list = asyncHandler(async (req, res) => {
   if (req.query.to) { where.push('p.purchase_date <= ?'); params.push(req.query.to); }
   if (req.query.supplier_id) { where.push('p.supplier_id = ?'); params.push(req.query.supplier_id); }
   if (req.query.due_only === '1') where.push('p.due_amount > 0');
-  if (req.query.q) { where.push('(p.invoice_no LIKE ? OR p.supplier_ref LIKE ? OR s.name LIKE ?)'); const l = `%${req.query.q}%`; params.push(l, l, l); }
+  if (req.query.q) { where.push('(p.invoice_no ILIKE ? OR p.supplier_ref ILIKE ? OR s.name ILIKE ?)'); const l = `%${req.query.q}%`; params.push(l, l, l); }
   const base = `FROM purchases p LEFT JOIN suppliers s ON s.id = p.supplier_id WHERE ${where.join(' AND ')}`;
   const [sum] = await query(`SELECT COUNT(*) AS total, COALESCE(SUM(p.grand_total),0) AS amount, COALESCE(SUM(p.paid_amount),0) AS paid, COALESCE(SUM(p.due_amount),0) AS due ${base}`, params);
   const rows = await query(

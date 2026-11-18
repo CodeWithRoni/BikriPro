@@ -9,14 +9,17 @@ function errorHandler(err, req, res, next) {
   let status = err.status || 500;
   let message = err.message || 'Something went wrong';
 
-  // Friendly messages for common MySQL errors
-  if (err.code === 'ER_DUP_ENTRY') {
+  // Friendly messages for common PostgreSQL errors
+  if (err.code === '23505') {
     status = 409;
-    const m = /for key '(?:\w+\.)?(\w+)'/.exec(err.sqlMessage || '');
+    const m = /Key \((\w+)\)/.exec(err.detail || '');
     message = `Duplicate value${m ? ` (${m[1]})` : ''} — this already exists`;
-  } else if (err.code === 'ER_ROW_IS_REFERENCED_2' || err.code === 'ER_ROW_IS_REFERENCED') {
+  } else if (err.code === '23503') {
     status = 409;
     message = 'This record is used elsewhere and cannot be deleted';
+  } else if (err.code === '23514' || err.code === '22P02' || err.code === '22007') {
+    status = 400;
+    message = 'Invalid value — please check the form';
   } else if (err.code === 'LIMIT_FILE_SIZE') {
     status = 413;
     message = 'File is too large';

@@ -19,47 +19,47 @@ exports.dashboard = asyncHandler(async (req, res) => {
      FROM sales WHERE DATE(sale_date) = ? AND status <> 'cancelled'`, [t]);
   const [monthSales] = await query(
     `SELECT COUNT(*) AS invoices, COALESCE(SUM(grand_total),0) AS amount FROM sales
-     WHERE sale_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND status <> 'cancelled'`);
+     WHERE sale_date >= date_trunc('month', bp_today())::date AND status <> 'cancelled'`);
   const [todayCollections] = await query('SELECT COALESCE(SUM(amount),0) AS amount FROM customer_collections WHERE collection_date = ?', [t]);
   const [todayExpenses] = await query('SELECT COALESCE(SUM(amount),0) AS amount FROM expenses WHERE expense_date = ?', [t]);
-  const [receivable] = await query('SELECT COALESCE(SUM(balance),0) AS amount, SUM(balance > 0) AS customers FROM v_customer_balance WHERE balance > 0');
+  const [receivable] = await query('SELECT COALESCE(SUM(balance),0) AS amount, COUNT(*) AS customers FROM v_customer_balance WHERE balance > 0');
   const [payable] = await query('SELECT COALESCE(SUM(balance),0) AS amount FROM v_supplier_balance WHERE balance > 0');
   const [stock] = await query(
     `SELECT COUNT(*) AS skus, COALESCE(SUM(v.stock_qty),0) AS qty, COALESCE(SUM(v.stock_qty * v.purchase_price),0) AS value,
-            SUM(v.stock_qty <= v.low_stock_alert) AS low_stock
-     FROM product_variants v JOIN products p ON p.id = v.product_id WHERE v.is_active = 1 AND p.is_active = 1`);
+            COUNT(*) FILTER (WHERE v.stock_qty <= v.low_stock_alert) AS low_stock
+     FROM product_variants v JOIN products p ON p.id = v.product_id WHERE v.is_active = true AND p.is_active = true`);
 
   // Due Collection Reminders: credit sales whose next payment date has arrived
   const dueReminders = await query(
     `SELECT c.id AS customer_id, c.name, c.phone, c.address,
             SUM(s.due_amount) AS due_amount, MIN(s.next_payment_date) AS next_payment_date,
-            DATEDIFF(CURDATE(), MIN(s.next_payment_date)) AS days_overdue, COUNT(*) AS invoices,
-            GROUP_CONCAT(s.invoice_no ORDER BY s.sale_date SEPARATOR ', ') AS invoice_nos
+            (bp_today() - MIN(s.next_payment_date)) AS days_overdue, COUNT(*) AS invoices,
+            string_agg(s.invoice_no, ', ' ORDER BY s.sale_date) AS invoice_nos
      FROM sales s JOIN customers c ON c.id = s.customer_id
-     WHERE s.due_amount > 0 AND s.next_payment_date IS NOT NULL AND s.next_payment_date <= CURDATE()
+     WHERE s.due_amount > 0 AND s.next_payment_date IS NOT NULL AND s.next_payment_date <= bp_today()
      GROUP BY c.id ORDER BY next_payment_date, due_amount DESC LIMIT 50`);
   const upcomingDues = await query(
     `SELECT c.id AS customer_id, c.name, c.phone, SUM(s.due_amount) AS due_amount, MIN(s.next_payment_date) AS next_payment_date
      FROM sales s JOIN customers c ON c.id = s.customer_id
-     WHERE s.due_amount > 0 AND s.next_payment_date > CURDATE() AND s.next_payment_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+     WHERE s.due_amount > 0 AND s.next_payment_date > bp_today() AND s.next_payment_date <= (bp_today() + 7)
      GROUP BY c.id ORDER BY next_payment_date LIMIT 20`);
 
   const last7 = await query(
     `SELECT DATE(sale_date) AS day, COALESCE(SUM(grand_total),0) AS amount, COUNT(*) AS invoices
-     FROM sales WHERE sale_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND status <> 'cancelled'
+     FROM sales WHERE sale_date >= (bp_today() - 6) AND status <> 'cancelled'
      GROUP BY DATE(sale_date) ORDER BY day`);
   const bestSellers = await query(
     `SELECT si.product_name, si.variant_label, SUM(si.qty - si.returned_qty) AS qty, SUM(si.line_total) AS amount
-     FROM sale_items si JOIN sales s ON s.id = si.sale_id WHERE s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+     FROM sale_items si JOIN sales s ON s.id = si.sale_id WHERE s.sale_date >= (bp_today() - 30)
      GROUP BY si.product_name, si.variant_label ORDER BY qty DESC LIMIT 5`);
   const lowStock = await query(
     `SELECT p.name, v.sku, v.size, v.color, v.stock_qty, v.low_stock_alert FROM product_variants v JOIN products p ON p.id = v.product_id
-     WHERE v.is_active = 1 AND p.is_active = 1 AND v.stock_qty <= v.low_stock_alert ORDER BY v.stock_qty LIMIT 10`);
+     WHERE v.is_active = true AND p.is_active = true AND v.stock_qty <= v.low_stock_alert ORDER BY v.stock_qty LIMIT 10`);
   const topLoyalty = await query(
-    'SELECT id, name, phone, loyalty_points, total_purchase FROM customers WHERE is_active = 1 AND is_walk_in = 0 AND loyalty_points > 0 ORDER BY loyalty_points DESC LIMIT 5');
-  const [loyaltyTotals] = await query('SELECT COALESCE(SUM(loyalty_points),0) AS outstanding_points, SUM(loyalty_points > 0) AS members FROM customers WHERE is_active = 1');
+    'SELECT id, name, phone, loyalty_points, total_purchase FROM customers WHERE is_active = true AND is_walk_in = false AND loyalty_points > 0 ORDER BY loyalty_points DESC LIMIT 5');
+  const [loyaltyTotals] = await query('SELECT COALESCE(SUM(loyalty_points),0) AS outstanding_points, COUNT(*) FILTER (WHERE loyalty_points > 0) AS members FROM customers WHERE is_active = true');
   const birthdays = await query(
-    `SELECT id, name, phone FROM customers WHERE is_active = 1 AND dob IS NOT NULL AND DATE_FORMAT(dob,'%m-%d') = DATE_FORMAT(CURDATE(),'%m-%d')`);
+    `SELECT id, name, phone FROM customers WHERE is_active = true AND dob IS NOT NULL AND to_char(dob, 'MM-DD') = to_char(bp_today(), 'MM-DD')`);
 
   res.json({
     today: { ...todaySales, collections: todayCollections.amount, expenses: todayExpenses.amount },
@@ -132,7 +132,7 @@ const REPORTS = {
     `SELECT p.name, c.name AS category, b.name AS brand, v.sku, v.size, v.color, v.stock_qty, v.purchase_price, v.retail_price,
             ROUND(v.stock_qty * v.purchase_price, 2) AS stock_value
      FROM product_variants v JOIN products p ON p.id = v.product_id LEFT JOIN categories c ON c.id = p.category_id
-     LEFT JOIN brands b ON b.id = p.brand_id WHERE v.is_active = 1 AND p.is_active = 1 ORDER BY p.name`),
+     LEFT JOIN brands b ON b.id = p.brand_id WHERE v.is_active = true AND p.is_active = true ORDER BY p.name`),
   receivables: async () => query(
     `SELECT c.name, c.phone, c.area, c.address, ROUND(b.balance,2) AS balance FROM customers c JOIN v_customer_balance b ON b.customer_id = c.id
      WHERE b.balance > 0 ORDER BY b.balance DESC`),
@@ -144,7 +144,7 @@ const REPORTS = {
        (SELECT COALESCE(SUM(points),0) FROM loyalty_transactions l WHERE l.customer_id = c.id AND l.type = 'earn') AS earned,
        (SELECT COALESCE(-SUM(points),0) FROM loyalty_transactions l WHERE l.customer_id = c.id AND l.type = 'redeem') AS redeemed,
        (SELECT MIN(created_at) FROM loyalty_transactions l WHERE l.customer_id = c.id) AS member_since
-     FROM customers c WHERE c.is_walk_in = 0 AND (c.total_purchase > 0 OR c.loyalty_points > 0) ORDER BY c.loyalty_points DESC`),
+     FROM customers c WHERE c.is_walk_in = false AND (c.total_purchase > 0 OR c.loyalty_points > 0) ORDER BY c.loyalty_points DESC`),
   expenses: async ({ from, to }) => query(
     `SELECT e.expense_date, COALESCE(ec.name,'Other') AS category, a.name AS account, e.amount, e.note
      FROM expenses e LEFT JOIN expense_categories ec ON ec.id = e.category_id JOIN accounts a ON a.id = e.account_id
@@ -174,7 +174,7 @@ exports.report = asyncHandler(async (req, res) => {
 /** GET /price-manager?filter=unpriced|no_retail|no_wholesale|below_cost&category_id=&brand_id=&q= */
 exports.priceList = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query, 100);
-  const where = ['v.is_active = 1', 'p.is_active = 1'];
+  const where = ['v.is_active = true', 'p.is_active = true'];
   const params = [];
   switch (req.query.filter) {
     case 'unpriced': where.push('v.retail_price IS NULL AND v.wholesale_price IS NULL'); break;
@@ -185,14 +185,16 @@ exports.priceList = asyncHandler(async (req, res) => {
   }
   if (req.query.category_id) { where.push('p.category_id = ?'); params.push(req.query.category_id); }
   if (req.query.brand_id) { where.push('p.brand_id = ?'); params.push(req.query.brand_id); }
-  if (req.query.q) { where.push('(p.name LIKE ? OR v.sku LIKE ? OR v.barcode = ?)'); params.push(`%${req.query.q}%`, `%${req.query.q}%`, req.query.q); }
+  if (req.query.q) { where.push('(p.name ILIKE ? OR v.sku ILIKE ? OR v.barcode = ?)'); params.push(`%${req.query.q}%`, `%${req.query.q}%`, req.query.q); }
   const base = `FROM product_variants v JOIN products p ON p.id = v.product_id LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN brands b ON b.id = p.brand_id WHERE ${where.join(' AND ')}`;
   const [{ total }] = await query(`SELECT COUNT(*) AS total ${base}`, params);
   const [counts] = await query(
-    `SELECT SUM(v.retail_price IS NULL AND v.wholesale_price IS NULL) AS unpriced, SUM(v.retail_price IS NULL) AS no_retail,
-            SUM(v.wholesale_price IS NULL) AS no_wholesale, SUM(v.retail_price < v.purchase_price) AS below_cost
-     FROM product_variants v JOIN products p ON p.id = v.product_id WHERE v.is_active = 1 AND p.is_active = 1`);
+    `SELECT COUNT(*) FILTER (WHERE v.retail_price IS NULL AND v.wholesale_price IS NULL) AS unpriced,
+            COUNT(*) FILTER (WHERE v.retail_price IS NULL) AS no_retail,
+            COUNT(*) FILTER (WHERE v.wholesale_price IS NULL) AS no_wholesale,
+            COUNT(*) FILTER (WHERE v.retail_price < v.purchase_price) AS below_cost
+     FROM product_variants v JOIN products p ON p.id = v.product_id WHERE v.is_active = true AND p.is_active = true`);
   const rows = await query(
     `SELECT v.id AS variant_id, p.id AS product_id, p.name, c.name AS category, b.name AS brand, v.sku, v.size, v.color,
             v.purchase_price, v.retail_price, v.wholesale_price, v.stock_qty
@@ -273,7 +275,7 @@ exports.activity = asyncHandler(async (req, res) => {
   if (req.query.user_id) { where.push('l.user_id = ?'); params.push(req.query.user_id); }
   if (req.query.from) { where.push('DATE(l.created_at) >= ?'); params.push(req.query.from); }
   if (req.query.to) { where.push('DATE(l.created_at) <= ?'); params.push(req.query.to); }
-  if (req.query.q) { where.push('(l.details LIKE ? OR l.action LIKE ?)'); params.push(`%${req.query.q}%`, `%${req.query.q}%`); }
+  if (req.query.q) { where.push('(l.details ILIKE ? OR l.action ILIKE ?)'); params.push(`%${req.query.q}%`, `%${req.query.q}%`); }
   const base = `FROM activity_logs l LEFT JOIN users u ON u.id = l.user_id WHERE ${where.join(' AND ')}`;
   const [{ total }] = await query(`SELECT COUNT(*) AS total ${base}`, params);
   const rows = await query(`SELECT l.*, u.name AS user_name, u.role ${base} ORDER BY l.id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);

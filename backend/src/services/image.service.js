@@ -9,11 +9,9 @@
  *      leftover space is padded with a clean white background
  *   4. WebP compression, stepping quality down until the file is small
  */
-const fs = require('fs/promises');
-const path = require('path');
 const crypto = require('crypto');
 const sharp = require('sharp');
-const env = require('../config/env');
+const { saveFile, deleteFile } = require('./storage.service');
 
 const SIZE = 500;
 const TARGET_BYTES = 60 * 1024; // aim for <= 60 KB per product image
@@ -46,31 +44,19 @@ async function normaliseProductImage(buffer) {
   return out;
 }
 
-/** Process and save; returns public path like /uploads/products/abc.webp */
+/** Process and save; returns the stored path/URL of the 500x500 WebP. */
 async function saveProductImage(buffer) {
-  const dir = path.join(env.uploadDir, 'products');
-  await fs.mkdir(dir, { recursive: true });
   const data = await normaliseProductImage(buffer);
   const name = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.webp`;
-  await fs.writeFile(path.join(dir, name), data);
-  return `/uploads/products/${name}`;
+  return saveFile('products', name, data, 'image/webp');
 }
 
 /** Shop logo: keep aspect ratio, max 400px wide, PNG for transparency. */
 async function saveShopLogo(buffer) {
-  const dir = path.join(env.uploadDir, 'shop');
-  await fs.mkdir(dir, { recursive: true });
   const data = await sharp(buffer).rotate().resize(400, 400, { fit: 'inside', withoutEnlargement: true }).png({ compressionLevel: 9 }).toBuffer();
-  const name = `logo-${Date.now()}.png`;
-  await fs.writeFile(path.join(dir, name), data);
-  return `/uploads/shop/${name}`;
+  return saveFile('shop', `logo-${Date.now()}.png`, data, 'image/png');
 }
 
-async function deleteUpload(publicPath) {
-  if (!publicPath || !publicPath.startsWith('/uploads/')) return;
-  const abs = path.join(env.uploadDir, publicPath.replace(/^\/uploads\//, ''));
-  if (!abs.startsWith(env.uploadDir)) return; // path traversal guard
-  await fs.unlink(abs).catch(() => {});
-}
+const deleteUpload = deleteFile;
 
 module.exports = { normaliseProductImage, saveProductImage, saveShopLogo, deleteUpload, SIZE };

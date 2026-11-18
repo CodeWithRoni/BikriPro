@@ -29,7 +29,7 @@ exports.create = asyncHandler(async (req, res) => {
     // ---- customer ----
     let customer = null;
     if (b.customer_id) {
-      customer = await conn.one('SELECT * FROM customers WHERE id = ? AND is_active = 1 FOR UPDATE', [b.customer_id]);
+      customer = await conn.one('SELECT * FROM customers WHERE id = ? AND is_active = true FOR UPDATE', [b.customer_id]);
       if (!customer) throw badRequest('Customer not found');
     }
 
@@ -80,7 +80,7 @@ exports.create = asyncHandler(async (req, res) => {
     const payments = (b.payments || []).filter((p) => Number(p.amount) > 0);
     const accounts = {};
     for (const p of payments) {
-      const acc = await conn.one('SELECT id, type, name FROM accounts WHERE id = ? AND is_active = 1', [p.account_id]);
+      const acc = await conn.one('SELECT id, type, name FROM accounts WHERE id = ? AND is_active = true', [p.account_id]);
       if (!acc) throw badRequest('Invalid payment account');
       accounts[p.account_id] = acc;
     }
@@ -185,7 +185,7 @@ exports.list = asyncHandler(async (req, res) => {
   if (req.query.to) { where.push('DATE(s.sale_date) <= ?'); params.push(req.query.to); }
   if (req.query.customer_id) { where.push('s.customer_id = ?'); params.push(req.query.customer_id); }
   if (req.query.due_only === '1') where.push('s.due_amount > 0');
-  if (req.query.q) { where.push('(s.invoice_no LIKE ? OR c.name LIKE ? OR c.phone LIKE ?)'); const l = `%${req.query.q}%`; params.push(l, l, l); }
+  if (req.query.q) { where.push('(s.invoice_no ILIKE ? OR c.name ILIKE ? OR c.phone ILIKE ?)'); const l = `%${req.query.q}%`; params.push(l, l, l); }
   const base = `FROM sales s LEFT JOIN customers c ON c.id = s.customer_id LEFT JOIN users u ON u.id = s.user_id WHERE ${where.join(' AND ')}`;
   const [sum] = await query(`SELECT COUNT(*) AS total, COALESCE(SUM(s.grand_total),0) AS amount, COALESCE(SUM(s.paid_amount),0) AS paid, COALESCE(SUM(s.due_amount),0) AS due ${base}`, params);
   const rows = await query(
@@ -267,7 +267,7 @@ exports.createReturn = asyncHandler(async (req, res) => {
     if (!sale.customer_id && refund !== total) throw badRequest('Walk-in returns must be fully refunded');
     let accountId = b.account_id;
     if (refund > 0 && !accountId) {
-      accountId = (await conn.one("SELECT id FROM accounts WHERE type='cash' AND is_active=1 ORDER BY is_default DESC, id LIMIT 1"))?.id;
+      accountId = (await conn.one("SELECT id FROM accounts WHERE type='cash' AND is_active=true ORDER BY is_default DESC, id LIMIT 1"))?.id;
       if (!accountId) throw badRequest('Choose the account the refund is paid from');
     }
 
@@ -306,7 +306,7 @@ exports.listReturns = asyncHandler(async (req, res) => {
   const params = [];
   if (req.query.from) { where.push('DATE(r.return_date) >= ?'); params.push(req.query.from); }
   if (req.query.to) { where.push('DATE(r.return_date) <= ?'); params.push(req.query.to); }
-  if (req.query.q) { where.push('(r.return_no LIKE ? OR s.invoice_no LIKE ? OR c.name LIKE ?)'); const l = `%${req.query.q}%`; params.push(l, l, l); }
+  if (req.query.q) { where.push('(r.return_no ILIKE ? OR s.invoice_no ILIKE ? OR c.name ILIKE ?)'); const l = `%${req.query.q}%`; params.push(l, l, l); }
   const rows = await query(
     `SELECT r.*, s.invoice_no, c.name AS customer_name, u.name AS user_name FROM sale_returns r
      JOIN sales s ON s.id = r.sale_id LEFT JOIN customers c ON c.id = r.customer_id LEFT JOIN users u ON u.id = r.user_id

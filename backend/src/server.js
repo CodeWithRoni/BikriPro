@@ -4,6 +4,7 @@ const { pool } = require('./config/db');
 const { startCron } = require('./services/cron.service');
 const migrate = require('./db/migrate');
 const seed = require('./db/seed');
+const { ensureBucket, useSupabase } = require('./services/storage.service');
 
 async function main() {
   // Idempotent: creates the database, missing tables/views and first-run data
@@ -15,9 +16,13 @@ async function main() {
     }
     await pool.query('SELECT 1');
   } catch (e) {
-    console.error(`\n❌ Database not ready (${env.db.user}@${env.db.host}:${env.db.port}/${env.db.database}): ${e.message}`);
-    console.error('   Check DB_HOST / DB_USER / DB_PASSWORD in backend/.env (desktop: File → Server settings).\n');
+    const where = env.db.url.replace(/\/\/([^:@/]+)(:[^@]*)?@/, '//$1:****@');
+    console.error(`\n❌ Database not ready (${where}): ${e.message}`);
+    console.error('   Check DATABASE_URL in backend/.env (desktop: File → Server settings).\n');
     process.exit(1);
+  }
+  if (useSupabase()) {
+    ensureBucket().then(() => console.log('🗂  Supabase Storage ready')).catch((e) => console.warn('⚠️  Supabase Storage:', e.message));
   }
   startCron();
   app.listen(env.port, () => console.log(`✅ BikriPro API running on http://localhost:${env.port}/api`));

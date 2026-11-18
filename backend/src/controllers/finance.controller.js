@@ -9,11 +9,11 @@ const { recordTxn } = require('../services/accounts.service');
 const { allocateFifo } = require('./parties.controller');
 
 const BALANCE_SQL = `a.opening_balance
-  + COALESCE((SELECT SUM(IF(t.direction='in', t.amount, -t.amount)) FROM account_transactions t WHERE t.account_id = a.id), 0)`;
+  + COALESCE((SELECT SUM(CASE WHEN t.direction='in' THEN t.amount ELSE -t.amount END) FROM account_transactions t WHERE t.account_id = a.id), 0)`;
 
 // ---------- Accounts ----------
 exports.listAccounts = asyncHandler(async (req, res) => {
-  const rows = await query(`SELECT a.*, ROUND(${BALANCE_SQL}, 2) AS balance FROM accounts a ORDER BY a.is_active DESC, FIELD(a.type,'cash','mfs','bank','card'), a.name`);
+  const rows = await query(`SELECT a.*, ROUND(${BALANCE_SQL}, 2) AS balance FROM accounts a ORDER BY a.is_active DESC, array_position(ARRAY['cash','mfs','bank','card'], a.type), a.name`);
   const totals = rows.filter((r) => r.is_active).reduce((t, r) => { t[r.type] = money((t[r.type] || 0) + r.balance); t.all = money((t.all || 0) + r.balance); return t; }, {});
   res.json({ data: rows, totals });
 });
@@ -23,7 +23,7 @@ exports.createAccount = asyncHandler(async (req, res) => {
   const b = req.body;
   if (!['cash', 'bank', 'mfs', 'card'].includes(b.type)) throw badRequest('Invalid account type');
   const id = await transaction(async (conn) => {
-    if (b.is_default) await conn.query('UPDATE accounts SET is_default = 0 WHERE type = ?', [b.type]);
+    if (b.is_default) await conn.query('UPDATE accounts SET is_default = false WHERE type = ?', [b.type]);
     const r = await conn.q('INSERT INTO accounts (name, type, provider, account_no, branch, opening_balance, is_default) VALUES (?,?,?,?,?,?,?)',
       [b.name, b.type, b.provider || null, b.account_no || null, b.branch || null, money(b.opening_balance), b.is_default ? 1 : 0]);
     return r.insertId;
@@ -37,7 +37,7 @@ exports.updateAccount = asyncHandler(async (req, res) => {
   if (!a) throw notFound();
   const b = { ...a, ...req.body };
   await transaction(async (conn) => {
-    if (req.body.is_default) await conn.query('UPDATE accounts SET is_default = 0 WHERE type = ?', [b.type]);
+    if (req.body.is_default) await conn.query('UPDATE accounts SET is_default = false WHERE type = ?', [b.type]);
     await conn.query('UPDATE accounts SET name=?, provider=?, account_no=?, branch=?, opening_balance=?, is_default=?, is_active=? WHERE id=?',
       [b.name, b.provider, b.account_no, b.branch, money(b.opening_balance), b.is_default ? 1 : 0, b.is_active ? 1 : 0, a.id]);
   });
@@ -52,7 +52,7 @@ exports.accountStatement = asyncHandler(async (req, res) => {
   const { from, to } = req.query;
   let opening = Number(a.opening_balance);
   if (from) {
-    const [{ s }] = await query("SELECT COALESCE(SUM(IF(direction='in', amount, -amount)),0) AS s FROM account_transactions WHERE account_id = ? AND txn_date < ?", [a.id, from]);
+    const [{ s }] = await query("SELECT COALESCE(SUM(CASE WHEN direction='in' THEN amount ELSE -amount END),0) AS s FROM account_transactions WHERE account_id = ? AND txn_date < ?", [a.id, from]);
     opening += Number(s);
   }
   const params = [a.id];
@@ -135,7 +135,7 @@ exports.payables = asyncHandler(async (req, res) => {
   res.json(await query(
     `SELECT s.id, s.name, s.company, s.phone, ROUND(b.balance,2) AS balance,
        (SELECT MAX(payment_date) FROM supplier_payments x WHERE x.supplier_id = s.id) AS last_payment
-     FROM suppliers s JOIN v_supplier_balance b ON b.supplier_id = s.id WHERE s.is_active = 1 AND b.balance > 0 ORDER BY b.balance DESC`));
+     FROM suppliers s JOIN v_supplier_balance b ON b.supplier_id = s.id WHERE s.is_active = true AND b.balance > 0 ORDER BY b.balance DESC`));
 });
 
 // ---------- Customer Collections (Collection menu) ----------
@@ -191,13 +191,13 @@ exports.listCollections = asyncHandler(async (req, res) => {
 exports.receivables = asyncHandler(async (req, res) => {
   const params = [];
   let extra = '';
-  if (req.query.area) { extra += ' AND (c.area LIKE ? OR c.address LIKE ?)'; params.push(`%${req.query.area}%`, `%${req.query.area}%`); }
+  if (req.query.area) { extra += ' AND (c.area ILIKE ? OR c.address ILIKE ?)'; params.push(`%${req.query.area}%`, `%${req.query.area}%`); }
   const rows = await query(
     `SELECT c.id, c.name, c.phone, c.address, c.area, ROUND(b.balance,2) AS balance,
        (SELECT MIN(s.next_payment_date) FROM sales s WHERE s.customer_id = c.id AND s.due_amount > 0) AS next_payment_date,
        (SELECT MAX(x.collection_date) FROM customer_collections x WHERE x.customer_id = c.id) AS last_collection
      FROM customers c JOIN v_customer_balance b ON b.customer_id = c.id
-     WHERE c.is_active = 1 AND b.balance > 0 ${extra} ORDER BY next_payment_date IS NULL, next_payment_date, b.balance DESC`, params);
+     WHERE c.is_active = true AND b.balance > 0 ${extra} ORDER BY next_payment_date ASC NULLS LAST, balance DESC`, params);
   const t = today();
   const out = rows.map((r) => ({ ...r, overdue: !!r.next_payment_date && r.next_payment_date <= t }));
   res.json(req.query.overdue === '1' ? out.filter((r) => r.overdue) : out);

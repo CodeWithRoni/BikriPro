@@ -39,10 +39,10 @@ const PRODUCT_COLS = 'p.id AS product_id, p.name, p.image_path, p.is_favorite, p
  */
 exports.list = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query, 50);
-  const where = ['p.is_active = 1', 'v.is_active = 1'];
+  const where = ['p.is_active = true', 'v.is_active = true'];
   const params = [];
   if (req.query.q) {
-    where.push('(p.name LIKE ? OR v.sku LIKE ? OR v.barcode = ? OR b.name LIKE ?)');
+    where.push('(p.name ILIKE ? OR v.sku ILIKE ? OR v.barcode = ? OR b.name ILIKE ?)');
     const like = `%${req.query.q}%`;
     params.push(like, like, req.query.q, like);
   }
@@ -62,7 +62,7 @@ exports.lookup = asyncHandler(async (req, res) => {
   const row = await one(
     `SELECT ${PRODUCT_COLS}, ${VARIANT_COLS} FROM product_variants v JOIN products p ON p.id = v.product_id
      LEFT JOIN categories c ON c.id = p.category_id LEFT JOIN brands b ON b.id = p.brand_id
-     WHERE (v.barcode = ? OR v.sku = ?) AND v.is_active = 1 AND p.is_active = 1 LIMIT 1`,
+     WHERE (v.barcode = ? OR v.sku = ?) AND v.is_active = true AND p.is_active = true LIMIT 1`,
     [req.params.code, req.params.code]
   );
   if (!row) throw notFound('No product with this barcode/SKU');
@@ -73,7 +73,7 @@ exports.lookup = asyncHandler(async (req, res) => {
 exports.posGrid = asyncHandler(async (req, res) => {
   const join = `FROM product_variants v JOIN products p ON p.id = v.product_id
     LEFT JOIN categories c ON c.id = p.category_id LEFT JOIN brands b ON b.id = p.brand_id`;
-  const active = 'p.is_active = 1 AND v.is_active = 1';
+  const active = 'p.is_active = true AND v.is_active = true';
   const [recent, best, favorite] = await Promise.all([
     query(`SELECT ${PRODUCT_COLS}, ${VARIANT_COLS} ${join}
       JOIN (SELECT si.variant_id, MAX(s.sale_date) AS last_sold FROM sale_items si JOIN sales s ON s.id = si.sale_id
@@ -81,9 +81,9 @@ exports.posGrid = asyncHandler(async (req, res) => {
       WHERE ${active} ORDER BY r.last_sold DESC`),
     query(`SELECT ${PRODUCT_COLS}, ${VARIANT_COLS}, bs.sold ${join}
       JOIN (SELECT si.variant_id, SUM(si.qty - si.returned_qty) AS sold FROM sale_items si JOIN sales s ON s.id = si.sale_id
-            WHERE s.sale_date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY) GROUP BY si.variant_id ORDER BY sold DESC LIMIT 24) bs ON bs.variant_id = v.id
+            WHERE s.sale_date >= (bp_today() - 90) GROUP BY si.variant_id ORDER BY sold DESC LIMIT 24) bs ON bs.variant_id = v.id
       WHERE ${active} ORDER BY bs.sold DESC`),
-    query(`SELECT ${PRODUCT_COLS}, ${VARIANT_COLS} ${join} WHERE ${active} AND p.is_favorite = 1 ORDER BY p.name LIMIT 48`),
+    query(`SELECT ${PRODUCT_COLS}, ${VARIANT_COLS} ${join} WHERE ${active} AND p.is_favorite = true ORDER BY p.name LIMIT 48`),
   ]);
   // New shop with no sales yet: show newest products as "recent"
   const recentOut = recent.length ? recent
@@ -95,7 +95,7 @@ exports.get = asyncHandler(async (req, res) => {
   const p = await one(`SELECT p.*, c.name AS category, b.name AS brand FROM products p
     LEFT JOIN categories c ON c.id = p.category_id LEFT JOIN brands b ON b.id = p.brand_id WHERE p.id = ?`, [req.params.id]);
   if (!p) throw notFound('Product not found');
-  p.variants = await query('SELECT * FROM product_variants WHERE product_id = ? AND is_active = 1 ORDER BY id', [p.id]);
+  p.variants = await query('SELECT * FROM product_variants WHERE product_id = ? AND is_active = true ORDER BY id', [p.id]);
   res.json(p);
 });
 
@@ -191,7 +191,7 @@ exports.update = asyncHandler(async (req, res) => {
     if (Array.isArray(body.variants)) {
       const keep = await upsertVariants(conn, id, body.name ?? existing.name, body.variants, req.user.id);
       // Variants removed in the form are deactivated (history keeps referencing them)
-      await conn.query(`UPDATE product_variants SET is_active = 0 WHERE product_id = ? ${keep.length ? 'AND id NOT IN (?)' : ''}`, keep.length ? [id, keep] : [id]);
+      await conn.query(`UPDATE product_variants SET is_active = false WHERE product_id = ? ${keep.length ? 'AND id NOT IN (?)' : ''}`, keep.length ? [id, keep] : [id]);
     }
   });
   if (imagePath !== existing.image_path) await deleteUpload(existing.image_path);
@@ -200,13 +200,13 @@ exports.update = asyncHandler(async (req, res) => {
 });
 
 exports.toggleFavorite = asyncHandler(async (req, res) => {
-  await query('UPDATE products SET is_favorite = 1 - is_favorite WHERE id = ?', [req.params.id]);
+  await query('UPDATE products SET is_favorite = NOT is_favorite WHERE id = ?', [req.params.id]);
   const p = await one('SELECT is_favorite FROM products WHERE id = ?', [req.params.id]);
   res.json({ is_favorite: p?.is_favorite });
 });
 
 exports.remove = asyncHandler(async (req, res) => {
-  await query('UPDATE products SET is_active = 0 WHERE id = ?', [req.params.id]);
+  await query('UPDATE products SET is_active = false WHERE id = ?', [req.params.id]);
   await logActivity(req, 'products', 'delete', req.params.id);
   res.json({ message: 'Product archived' });
 });

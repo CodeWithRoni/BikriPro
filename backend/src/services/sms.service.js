@@ -7,7 +7,7 @@
  * set SMS_PROVIDER + SMS_API_URL + SMS_API_KEY + SMS_SENDER_ID in .env.
  */
 const env = require('../config/env');
-const { pool } = require('../config/db');
+const { query } = require('../config/db');
 const settings = require('./settings.service');
 
 function render(template, vars) {
@@ -50,17 +50,17 @@ async function dispatch(phone, message) {
 /** Send and log. Never throws. */
 async function sendSms({ phone, message, purpose = 'custom', customerId = null }) {
   const to = normalisePhone(phone);
-  const [ins] = await pool.query(
+  const ins = await query(
     'INSERT INTO sms_logs (customer_id, phone, purpose, message, status) VALUES (?,?,?,?,?)',
     [customerId, to || String(phone || ''), purpose, message, to ? 'queued' : 'skipped']
   );
   if (!to) return { status: 'skipped', error: 'Invalid phone number' };
   try {
     const r = await dispatch(to, message);
-    await pool.query('UPDATE sms_logs SET status=?, provider_ref=? WHERE id=?', [r.status, r.ref, ins.insertId]);
+    await query('UPDATE sms_logs SET status=?, provider_ref=? WHERE id=?', [r.status, r.ref, ins.insertId]);
     return r;
   } catch (e) {
-    await pool.query('UPDATE sms_logs SET status="failed", error=? WHERE id=?', [e.message.slice(0, 250), ins.insertId]);
+    await query("UPDATE sms_logs SET status='failed', error=? WHERE id=?", [e.message.slice(0, 250), ins.insertId]);
     return { status: 'failed', error: e.message };
   }
 }
@@ -74,7 +74,7 @@ async function sendSaleSms(sale, customer) {
     points: customer.loyalty_points ?? '',
   });
   const r = await sendSms({ phone: customer.phone, message, purpose: 'sale', customerId: customer.id });
-  if (r.status === 'sent') await pool.query('UPDATE sales SET sms_sent=1 WHERE id=?', [sale.id]);
+  if (r.status === 'sent') await query('UPDATE sales SET sms_sent = true WHERE id = ?', [sale.id]);
   return r;
 }
 

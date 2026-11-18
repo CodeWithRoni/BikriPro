@@ -27,5 +27,6 @@ for (const f of ['package.json', 'package-lock.json', '.env.example']) {
   if (fs.existsSync(path.join(backend, f))) fs.cpSync(path.join(backend, f), path.join(server, f));
 }
 fs.cpSync(path.join(backend, 'src'), path.join(server, 'src'), { recursive: true });
+fs.cpSync(path.join(root, 'supabase', 'migrations'), path.join(server, 'migrations'), { recursive: true });
 run('npm install --omit=dev --no-audit --no-fund', server);
 console.log('✅ desktop/web and desktop/server are ready');

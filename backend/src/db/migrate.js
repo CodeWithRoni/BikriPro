@@ -1,24 +1,38 @@
 /**
- * Creates the database (if missing) and applies schema.sql.
- * Safe to run repeatedly: all statements are CREATE ... IF NOT EXISTS / OR REPLACE.
+ * Applies the SQL migrations in /supabase/migrations (or backend/migrations
+ * when packaged) in filename order. Every migration is idempotent
+ * (CREATE … IF NOT EXISTS / CREATE OR REPLACE), so this is safe to run on
+ * every start. On Supabase you can also apply them with `supabase db push`.
  */
 const fs = require('fs');
 const path = require('path');
-const mysql = require('mysql2/promise');
-const env = require('../config/env');
+const { pool } = require('../config/db');
+
+function migrationsDir() {
+  const candidates = [
+    process.env.MIGRATIONS_DIR,
+    path.resolve(__dirname, '../../../supabase/migrations'), // repo layout
+    path.resolve(__dirname, '../../migrations'),             // packaged (desktop/server)
+  ].filter(Boolean);
+  const dir = candidates.find((d) => fs.existsSync(d));
+  if (!dir) throw new Error('Migrations folder not found');
+  return dir;
+}
 
 async function migrate() {
-  const { database, ...conn } = env.db;
-  const root = await mysql.createConnection({ ...conn, multipleStatements: true });
-  await root.query(`CREATE DATABASE IF NOT EXISTS \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-  await root.query(`USE \`${database}\``);
-  const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
-  await root.query(sql);
-  await root.end();
-  console.log(`✅ Schema applied to database "${database}"`);
+  const dir = migrationsDir();
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
+  const client = await pool.connect();
+  try {
+    await client.query("SET client_min_messages = 'warning'");
+    for (const f of files) await client.query(fs.readFileSync(path.join(dir, f), 'utf8'));
+  } finally {
+    client.release();
+  }
+  console.log(`✅ Database schema up to date (${files.length} migration file${files.length === 1 ? '' : 's'})`);
 }
 
 if (require.main === module) {
-  migrate().catch((e) => { console.error('❌ Migration failed:', e.message); process.exit(1); });
+  migrate().then(() => pool.end()).catch((e) => { console.error('❌ Migration failed:', e.message); process.exit(1); });
 }
 module.exports = migrate;

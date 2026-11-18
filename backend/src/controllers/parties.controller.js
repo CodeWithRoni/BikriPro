@@ -30,12 +30,12 @@ async function ledgerEntries(type, id) {
           FROM sale_returns r WHERE r.customer_id = ?
         UNION ALL
         SELECT 'collection', c.id, c.receipt_no, c.collection_date, c.created_at,
-               CONCAT('Collection ', c.receipt_no, IFNULL(CONCAT(' — ', c.note), '')), 0, c.amount
+               CONCAT('Collection ', c.receipt_no, COALESCE(CONCAT(' — ', c.note), '')), 0, c.amount
           FROM customer_collections c WHERE c.customer_id = ?
         UNION ALL
         SELECT 'adjustment', a.id, CONCAT('ADJ-', a.id), a.adj_date, a.created_at,
-               CONCAT('Adjustment (', a.reason, ')', IFNULL(CONCAT(' — ', a.note), '')),
-               IF(a.effect = 'addition', a.amount, 0), IF(a.effect = 'deduction', a.amount, 0)
+               CONCAT('Adjustment (', a.reason, ')', COALESCE(CONCAT(' — ', a.note), '')),
+               CASE WHEN a.effect = 'addition' THEN a.amount ELSE 0 END, CASE WHEN a.effect = 'deduction' THEN a.amount ELSE 0 END
           FROM ledger_adjustments a WHERE a.party_type = 'customer' AND a.party_id = ?
       ) t`,
       [id, id, id, id]
@@ -44,7 +44,7 @@ async function ledgerEntries(type, id) {
   return query(
     `SELECT * FROM (
       SELECT 'purchase' AS txn_type, p.id AS ref_id, p.invoice_no AS ref_no, p.purchase_date AS txn_date, p.created_at,
-             CONCAT('Purchase ', p.invoice_no, IFNULL(CONCAT(' (Bill ', p.supplier_ref, ')'), '')) AS description,
+             CONCAT('Purchase ', p.invoice_no, COALESCE(CONCAT(' (Bill ', p.supplier_ref, ')'), '')) AS description,
              p.grand_total AS debit, p.paid_amount AS credit
         FROM purchases p WHERE p.supplier_id = ?
       UNION ALL
@@ -53,12 +53,12 @@ async function ledgerEntries(type, id) {
         FROM purchase_returns r WHERE r.supplier_id = ?
       UNION ALL
       SELECT 'payment', x.id, x.voucher_no, x.payment_date, x.created_at,
-             CONCAT('Payment ', x.voucher_no, IFNULL(CONCAT(' — ', x.note), '')), 0, x.amount
+             CONCAT('Payment ', x.voucher_no, COALESCE(CONCAT(' — ', x.note), '')), 0, x.amount
         FROM supplier_payments x WHERE x.supplier_id = ?
       UNION ALL
       SELECT 'adjustment', a.id, CONCAT('ADJ-', a.id), a.adj_date, a.created_at,
-             CONCAT('Adjustment (', a.reason, ')', IFNULL(CONCAT(' — ', a.note), '')),
-             IF(a.effect = 'addition', a.amount, 0), IF(a.effect = 'deduction', a.amount, 0)
+             CONCAT('Adjustment (', a.reason, ')', COALESCE(CONCAT(' — ', a.note), '')),
+             CASE WHEN a.effect = 'addition' THEN a.amount ELSE 0 END, CASE WHEN a.effect = 'deduction' THEN a.amount ELSE 0 END
         FROM ledger_adjustments a WHERE a.party_type = 'supplier' AND a.party_id = ?
     ) t`,
     [id, id, id, id]
@@ -97,16 +97,16 @@ function build(type) {
 
   ctrl.list = asyncHandler(async (req, res) => {
     const { limit, offset, page } = paging(req.query, 50);
-    const where = ['t.is_active = 1'];
+    const where = ['t.is_active = true'];
     const params = [];
-    if (type === 'customer') where.push('t.is_walk_in = 0');
+    if (type === 'customer') where.push('t.is_walk_in = false');
     if (req.query.q) {
       const like = `%${req.query.q}%`;
-      where.push(`(t.name LIKE ? OR t.phone LIKE ? OR EXISTS (SELECT 1 FROM ${c.contacts} x WHERE x.${c.fk} = t.id AND x.value LIKE ?)${type === 'supplier' ? ' OR t.company LIKE ?' : ''})`);
+      where.push(`(t.name ILIKE ? OR t.phone ILIKE ? OR EXISTS (SELECT 1 FROM ${c.contacts} x WHERE x.${c.fk} = t.id AND x.value ILIKE ?)${type === 'supplier' ? ' OR t.company ILIKE ?' : ''})`);
       params.push(like, like, like);
       if (type === 'supplier') params.push(like);
     }
-    if (req.query.area) { where.push('(t.area LIKE ? OR t.address LIKE ?)'); params.push(`%${req.query.area}%`, `%${req.query.area}%`); }
+    if (req.query.area) { where.push('(t.area ILIKE ? OR t.address ILIKE ?)'); params.push(`%${req.query.area}%`, `%${req.query.area}%`); }
     if (req.query.has_due === '1') where.push('b.balance > 0');
     const base = `FROM ${c.table} t JOIN ${c.view} b ON b.${c.viewFk} = t.id WHERE ${where.join(' AND ')}`;
     const [{ total, total_balance }] = await query(`SELECT COUNT(*) AS total, COALESCE(SUM(b.balance),0) AS total_balance ${base}`, params);
@@ -159,7 +159,7 @@ function build(type) {
     // Primary phone can come from the first phone in the dynamic list
     if (!f.phone && Array.isArray(req.body.contacts)) f.phone = req.body.contacts.find((x) => x.type === 'phone' && x.value)?.value || null;
     if (type === 'customer' && f.phone) {
-      const dup = await one('SELECT id, name FROM customers WHERE phone = ? AND is_active = 1', [f.phone]);
+      const dup = await one('SELECT id, name FROM customers WHERE phone = ? AND is_active = true', [f.phone]);
       if (dup) throw badRequest(`Phone already belongs to customer "${dup.name}"`);
     }
     const id = await transaction(async (conn) => {
@@ -190,7 +190,7 @@ function build(type) {
   ctrl.remove = asyncHandler(async (req, res) => {
     const b = await one(`SELECT balance FROM ${c.view} WHERE ${c.viewFk} = ?`, [req.params.id]);
     if (b && Math.abs(b.balance) > 0.009) throw badRequest(`Cannot delete: ledger balance is ${b.balance}. Settle it first.`);
-    await query(`UPDATE ${c.table} SET is_active = 0 WHERE id = ?`, [req.params.id]);
+    await query(`UPDATE ${c.table} SET is_active = false WHERE id = ?`, [req.params.id]);
     await logActivity(req, `${type}s`, 'delete', req.params.id);
     res.json({ message: 'Deleted' });
   });

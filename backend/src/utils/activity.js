@@ -1,4 +1,4 @@
-const { pool } = require('../config/db');
+const { query } = require('../config/db');
 
 /**
  * Record an entry in the Activity Log. Never throws: logging must not break
@@ -6,8 +6,8 @@ const { pool } = require('../config/db');
  */
 async function logActivity(req, module, action, refId = null, details = null, conn = null) {
   try {
-    const runner = conn || pool;
-    await runner.query(
+    const run = conn ? conn.query : query;
+    await run(
       'INSERT INTO activity_logs (user_id, module, action, ref_id, details, ip_address) VALUES (?,?,?,?,?,?)',
       [
         req?.user?.id || null,

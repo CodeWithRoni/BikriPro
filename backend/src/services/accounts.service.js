@@ -13,7 +13,7 @@ async function recordTxn(conn, { accountId, direction, amount, refType, refId = 
 }
 
 async function defaultCashAccount(conn) {
-  const acc = (await conn.one("SELECT id FROM accounts WHERE type='cash' AND is_active=1 ORDER BY is_default DESC, id LIMIT 1"));
+  const acc = (await conn.one("SELECT id FROM accounts WHERE type='cash' AND is_active=true ORDER BY is_default DESC, id LIMIT 1"));
   if (!acc) throw badRequest('No cash account configured. Add one in Cash, Bank & MFS Setup.');
   return acc.id;
 }

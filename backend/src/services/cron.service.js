@@ -16,10 +16,10 @@ async function runBirthdayWishes() {
   if (s.sms_birthday !== '1') return { sent: 0, skipped: 'disabled' };
   const customers = await query(
     `SELECT c.id, c.name, c.phone FROM customers c
-     WHERE c.is_active = 1 AND c.dob IS NOT NULL AND c.phone IS NOT NULL
-       AND DATE_FORMAT(c.dob, '%m-%d') = DATE_FORMAT(CURDATE(), '%m-%d')
+     WHERE c.is_active = true AND c.dob IS NOT NULL AND c.phone IS NOT NULL
+       AND to_char(c.dob, 'MM-DD') = to_char(bp_today(), 'MM-DD')
        AND NOT EXISTS (SELECT 1 FROM sms_logs l WHERE l.customer_id = c.id AND l.purpose = 'birthday'
-                       AND YEAR(l.created_at) = YEAR(CURDATE()) AND l.status = 'sent')`
+                       AND extract(year from l.created_at) = extract(year from bp_today()) AND l.status = 'sent')`
   );
   let sent = 0;
   for (const c of customers) {

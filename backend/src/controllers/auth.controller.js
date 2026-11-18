@@ -11,7 +11,7 @@ exports.login = asyncHandler(async (req, res) => {
     throw new HttpError(401, 'Wrong username or password');
   }
   if (!user.is_active) throw new HttpError(403, 'This account is disabled');
-  await query('UPDATE users SET last_login_at = NOW() WHERE id = ?', [user.id]);
+  await query('UPDATE users SET last_login_at = bp_now() WHERE id = ?', [user.id]);
   req.user = user;
   await logActivity(req, 'auth', 'login', user.id);
   res.json({

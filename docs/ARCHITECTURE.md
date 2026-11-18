@@ -17,11 +17,12 @@
                          │  • Sharp image engine        │
                          │  • node-cron (birthday SMS)  │
                          │  • SMS gateway adapter       │
+                         │  (Render / any Node host)    │
                          └──────────────┬──────────────┘
-                                        │ mysql2 pool (time_zone +06:00)
-                               ┌────────▼────────┐
-                               │ MySQL / MariaDB │
-                               └─────────────────┘
+                                        │ node-postgres pool (SSL, Session pooler)
+                         ┌──────────────▼──────────────┐
+                         │ Supabase: PostgreSQL + Storage│
+                         └─────────────────────────────┘
 ```
 
 One codebase serves every platform: the React build is loaded from disk by Electron and Capacitor, and from the API server for browsers. The client asks for the **server address** on first launch (Login → Server), so many tills and phones share one shop database.
@@ -30,11 +31,12 @@ One codebase serves every platform: the React build is loaded from disk by Elect
 
 | Path | Responsibility |
 |---|---|
-| `config/env.js`, `config/db.js` | Environment, MySQL pool, `transaction()` helper (sets `time_zone = '+06:00'`) |
+| `config/env.js`, `config/db.js` | Environment, PostgreSQL pool; `?` placeholders converted to `$n` (arrays expanded), automatic `RETURNING id`, `transaction()` helper |
 | `middleware/auth.js` | JWT verification, hierarchical `authorize('cashier'|'manager'|'admin')` |
 | `middleware/upload.js` | Multer memory storage (images go straight to Sharp) |
 | `controllers/*.js` | One controller per module (see routes) |
 | `services/image.service.js` | 500×500 normalisation: EXIF rotate → trim borders → `contain` fit on white → adaptive WebP compression |
+| `services/storage.service.js` | Saves images to a public Supabase Storage bucket (secret key, server-side only) or to local disk |
 | `services/stock.service.js` | Row-locked stock changes (`SELECT … FOR UPDATE`), negative-stock guard |
 | `services/accounts.service.js` | Cash-book entries for every money movement |
 | `services/loyalty.service.js` | Earn / redeem / reverse points |
@@ -43,11 +45,13 @@ One codebase serves every platform: the React build is loaded from disk by Elect
 | `services/cron.service.js` | Daily birthday wishes |
 | `utils/numbering.js` | Atomic document numbers (`INV-000001`, `PUR-…`, `COL-…`) |
 | `utils/activity.js` | Activity log writer |
-| `db/schema.sql`, `migrate.js`, `seed.js` | Schema, idempotent migration, first-run data |
+| `/supabase/migrations/*.sql`, `db/migrate.js`, `db/seed.js` | PostgreSQL schema, idempotent migration runner, first-run data |
 
-## 3. Database schema (MySQL)
+## 3. Database schema (PostgreSQL / Supabase)
 
-All money columns are `DECIMAL(14,2)`; quantities `DECIMAL(12,2)` (supports metres of fabric).
+All money columns are `numeric(14,2)`; quantities `numeric(12,2)` (supports metres of fabric). Ids are `bigint` identity columns, flags are `boolean`, fixed value lists use `CHECK` constraints. Times are stored as Bangladesh local time via `bp_now()` / `bp_today()` so reports don't depend on the server's timezone. Every foreign key is indexed and `DEFERRABLE`, which lets backup restore reload all tables inside one transaction.
+
+**Security:** RLS is enabled on every table with no policies, and `anon` / `authenticated` are revoked; the views use `security_invoker`. Supabase's publishable / anon keys therefore expose nothing — only the API (database owner) reads and writes data.
 
 | Area | Tables |
 |---|---|
@@ -121,6 +125,7 @@ Theme tokens are in `tailwind.config.js` (`ocean` palette, primary `ocean-600 #1
 
 ## 6. Security notes
 
+- Supabase Data API access is closed (RLS on, no policies, API roles revoked); the Storage secret key stays on the server.
 - Passwords and the security PIN are bcrypt-hashed; JWT secret comes from `.env` (the app refuses to start in production with the default).
 - Login is rate-limited; Helmet headers; all SQL is parameterised.
 - Restore and reset require the admin role **and** the PIN; reset also requires typing `RESET`.

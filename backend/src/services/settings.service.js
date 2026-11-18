@@ -46,7 +46,7 @@ async function setMany(obj) {
   const entries = Object.entries(obj).filter(([k]) => !SECRET_KEYS.includes(k));
   for (const [k, v] of entries) {
     await query(
-      'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)',
+      'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = bp_now()',
       [k, v === null || v === undefined ? null : String(v)]
     );
   }
@@ -54,7 +54,7 @@ async function setMany(obj) {
 
 async function setSecret(key, value) {
   await query(
-    'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)',
+    'INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = bp_now()',
     [key, value]
   );
 }

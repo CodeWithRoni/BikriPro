@@ -7,11 +7,20 @@ const env = {
   corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:5173')
     .split(',').map((s) => s.trim()).filter(Boolean),
   db: {
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: Number(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER || 'bikripro',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'bikripro',
+    // Supabase: Project → Connect → "Session pooler" connection string (IPv4-friendly)
+    url: process.env.DATABASE_URL
+      || `postgresql://${encodeURIComponent(process.env.DB_USER || 'postgres')}:${encodeURIComponent(process.env.DB_PASSWORD || '')}@${process.env.DB_HOST || '127.0.0.1'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'postgres'}`,
+    // SSL is required by Supabase; auto-on for *.supabase.com / *.supabase.co hosts
+    ssl: process.env.DB_SSL ? process.env.DB_SSL === '1' || process.env.DB_SSL === 'true'
+      : /supabase\.(co|com)/.test(process.env.DATABASE_URL || process.env.DB_HOST || ''),
+    poolMax: Number(process.env.DB_POOL_MAX || 10),
+  },
+  // Optional Supabase Storage for product images & shop logo (recommended on
+  // cloud hosts whose disk is wiped on every deploy). Leave empty to use local disk.
+  supabase: {
+    url: (process.env.SUPABASE_URL || '').replace(/\/+$/, ''),
+    secretKey: process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+    bucket: process.env.SUPABASE_BUCKET || 'bikripro',
   },
   jwtSecret: process.env.JWT_SECRET || 'dev-only-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '12h',
@@ -24,7 +33,6 @@ const env = {
   },
   birthdayCron: process.env.BIRTHDAY_SMS_CRON || '0 10 * * *',
   timezone: process.env.TZ || 'Asia/Dhaka',
-  dbTimezone: process.env.DB_TIMEZONE || '+06:00',
 };
 
 if (env.nodeEnv === 'production' && env.jwtSecret.startsWith('dev-only')) {

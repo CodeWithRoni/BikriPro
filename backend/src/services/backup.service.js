@@ -1,11 +1,11 @@
 /**
  * Database Export / Import / Reset utilities.
  *
- * Export format is portable JSON (no mysqldump binary needed, so it works the
+ * Export format is portable JSON (no pg_dump binary needed, so it works the
  * same on Windows desktops, shared hosting and Docker):
  *   { app: 'BikriPro', format: 1, exported_at, tables: { users: [...], ... } }
  */
-const { pool, transaction } = require('../config/db');
+const { query, transaction } = require('../config/db');
 
 // Parent tables first so a restore with FK checks on would also work.
 const TABLE_ORDER = [
@@ -22,11 +22,13 @@ const TABLE_ORDER = [
 async function exportAll() {
   const tables = {};
   for (const t of TABLE_ORDER) {
-    const [rows] = await pool.query(`SELECT * FROM \`${t}\``);
-    tables[t] = rows;
+    tables[t] = [...(await query(`SELECT * FROM "${t}" ORDER BY 1`))];
   }
   return { app: 'BikriPro', format: 1, exported_at: new Date().toISOString(), tables };
 }
+
+// MySQL-era backups stored booleans as 1/0 — Postgres accepts those as text
+const normalise = (v) => (v !== null && typeof v === 'object' && !(v instanceof Date) ? JSON.stringify(v) : v);
 
 async function importAll(dump) {
   if (!dump || dump.app !== 'BikriPro' || !dump.tables) throw Object.assign(new Error('Not a valid BikriPro backup file'), { status: 400 });
@@ -36,22 +38,24 @@ async function importAll(dump) {
   }
   const counts = {};
   await transaction(async (conn) => {
-    await conn.query('SET FOREIGN_KEY_CHECKS = 0');
-    try {
-      for (const t of [...known].reverse()) await conn.query(`DELETE FROM \`${t}\``);
-      for (const t of known) {
-        const rows = dump.tables[t];
-        counts[t] = rows.length;
-        if (!rows.length) continue;
-        const cols = Object.keys(rows[0]);
-        const colSql = cols.map((c) => `\`${c.replace(/`/g, '')}\``).join(',');
-        for (let i = 0; i < rows.length; i += 500) {
-          const chunk = rows.slice(i, i + 500).map((r) => cols.map((c) => r[c]));
-          await conn.query(`INSERT INTO \`${t}\` (${colSql}) VALUES ?`, [chunk]);
-        }
+    // All foreign keys are DEFERRABLE: check them once at COMMIT, so tables can
+    // be emptied and refilled in any order.
+    await conn.query('SET CONSTRAINTS ALL DEFERRED');
+    await conn.query(`TRUNCATE ${TABLE_ORDER.map((t) => `"${t}"`).join(', ')} RESTART IDENTITY`);
+    for (const t of known) {
+      const rows = dump.tables[t];
+      counts[t] = rows.length;
+      if (!rows.length) continue;
+      const cols = Object.keys(rows[0]).filter((c) => /^[a-z_][a-z0-9_]*$/.test(c));
+      const colSql = cols.map((c) => `"${c}"`).join(',');
+      for (let i = 0; i < rows.length; i += 500) {
+        const chunk = rows.slice(i, i + 500).map((r) => cols.map((c) => normalise(r[c])));
+        await conn.query(`INSERT INTO "${t}" (${colSql}) VALUES ?`, [chunk]);
       }
-    } finally {
-      await conn.query('SET FOREIGN_KEY_CHECKS = 1');
+      // Move identity counters past the restored ids
+      if (cols.includes('id')) {
+        await conn.query(`SELECT setval(pg_get_serial_sequence('public.${t}', 'id'), GREATEST((SELECT COALESCE(MAX(id), 0) FROM "${t}"), 1), (SELECT COUNT(*) > 0 FROM "${t}"))`);
+      }
     }
   });
   return counts;
@@ -64,7 +68,7 @@ const RESET_PLANS = {
     'DELETE FROM sale_items', 'DELETE FROM held_invoices', 'DELETE FROM loyalty_transactions',
     'DELETE FROM customer_collections',
     "DELETE FROM account_transactions WHERE ref_type IN ('sale','sale_return','collection')",
-    "DELETE FROM ledger_adjustments WHERE party_type='customer' AND ref_type='sale'",
+    "DELETE FROM ledger_adjustments WHERE party_type='customer' AND ref_type IN ('sale','collection')",
     'DELETE FROM sales',
     'UPDATE customers SET loyalty_points = 0, total_purchase = 0',
     "DELETE FROM number_sequences WHERE name IN ('sale','sale_return','collection','hold')",
@@ -82,7 +86,7 @@ const RESET_PLANS = {
     "DELETE FROM ledger_adjustments WHERE party_type = 'customer'",
     'UPDATE sales SET customer_id = NULL', 'UPDATE sale_returns SET customer_id = NULL',
     'UPDATE held_invoices SET customer_id = NULL', 'UPDATE sms_logs SET customer_id = NULL',
-    'DELETE FROM customer_contacts', 'DELETE FROM customers WHERE is_walk_in = 0',
+    'DELETE FROM customer_contacts', 'DELETE FROM customers WHERE NOT is_walk_in',
     'UPDATE customers SET loyalty_points = 0, total_purchase = 0, opening_balance = 0',
   ],
   suppliers: [

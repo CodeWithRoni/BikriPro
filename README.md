@@ -15,30 +15,35 @@
 
 | Folder | What it is |
 |---|---|
-| `backend/` | Node.js + Express REST API, MySQL, JWT roles (Admin / Manager / Cashier), Sharp image engine, cron jobs |
+| `backend/` | Node.js + Express REST API, PostgreSQL (Supabase), JWT roles (Admin / Manager / Cashier), Sharp image engine, cron jobs |
 | `frontend/` | React 18 + Tailwind CSS + Redux Toolkit web app (Ocean Blue theme, light/dark, collapsible sidebar). Also contains the Capacitor `android/` and `ios/` projects |
 | `desktop/` | Electron shell + electron-builder config for Windows `.exe`, macOS `.dmg`, Linux `.deb` |
 | `branding/` | Logo and app icons for every platform |
-| `docs/` | Install guide, architecture & API reference, packaging guide |
+| `supabase/migrations/` | PostgreSQL schema (applied automatically on start, or with `supabase db push`) |
+| `render.yaml` | One-click Render deployment of the API + web app |
+| `docs/` | Supabase/cloud guide, install guide, architecture & API reference, packaging guide |
 | `.github/workflows/build.yml` | One-click CI build of all installers (exe, dmg, deb, apk, ipa) |
 
-## Quick start (development)
+## Quick start
 
-Requirements: **Node.js 18+** and **MySQL 8 / MariaDB 10.6+**.
+**Cloud (recommended):** Supabase database + Render API + GitHub Pages — follow [`docs/SUPABASE.md`](docs/SUPABASE.md).
+
+**Development:** requires **Node.js 18+** and a PostgreSQL database (a Supabase project or a local PostgreSQL 14+).
 
 ```bash
 # 1. install
 npm run install:all
 
 # 2. configure the database connection
-cp backend/.env.example backend/.env      # then edit DB_USER / DB_PASSWORD / JWT_SECRET
+cp backend/.env.example backend/.env      # set DATABASE_URL and JWT_SECRET
 
-# 3. create tables + admin user (add --demo sample products with: npm run seed:demo)
-npm run setup
-
-# 4. run API (port 5000) and web app (port 5173) in two terminals
+# 3. run API (port 5000) and web app (port 5173) in two terminals.
+#    The API creates the tables and the admin user on its first start.
 npm run dev:api
 npm run dev:web
+
+# optional: sample products, supplier and customer
+npm run seed:demo
 ```
 
 Open http://localhost:5173 and sign in with **admin / admin123**. The security PIN (for restore/reset) is **1234**.
@@ -61,7 +66,7 @@ Single-port production run (API also serves the built web app): `npm start` → 
 15. **Shop Setup / Admin** — shop info & logo, VAT, receipt width, loyalty rates, SMS templates, users & roles, security PIN, **database Export / Import / Reset** (PIN + typed confirmation)
 16. **Activity Log** · 17. **Barcode Labels** (load from the last 10 purchases, choose label fields, A4 sheets or thermal presets / custom mm, live preview) · 18. **Price Manager** (unpriced / missing retail / missing wholesale / below-cost filters, inline edit, bulk markup rules)
 
-Product images of any size are automatically converted on the server to a **500 × 500 WebP** — trimmed, fitted without cropping or stretching, and compressed (typically 2–40 KB).
+Product images of any size are automatically converted on the server to a **500 × 500 WebP** — trimmed, fitted without cropping or stretching, and compressed (typically 2–40 KB) — and stored in Supabase Storage (or on the server's disk when Storage isn't configured).
 
 ## Building installers
 
@@ -71,6 +76,7 @@ Manual steps for each platform are in [`docs/PACKAGING.md`](docs/PACKAGING.md).
 
 ## Documentation
 
-- [docs/INSTALL.md](docs/INSTALL.md) — installing at a shop (server PC, tills, phones, MySQL on Windows)
+- [docs/SUPABASE.md](docs/SUPABASE.md) — cloud setup: Supabase database & storage, Render API, app server address
+- [docs/INSTALL.md](docs/INSTALL.md) — installing at a shop (tills, phones, printers, offline server option)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system design, database schema, API routes, business rules
 - [docs/PACKAGING.md](docs/PACKAGING.md) — Electron and Capacitor build guide

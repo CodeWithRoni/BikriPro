@@ -8,7 +8,7 @@ const settings = require('./settings.service');
 async function adjustStock(conn, variantId, delta, { allowNegative } = {}) {
   const v = await conn.one(
     `SELECT v.id, v.stock_qty, v.sku, p.name FROM product_variants v JOIN products p ON p.id = v.product_id
-     WHERE v.id = ? FOR UPDATE`,
+     WHERE v.id = ? FOR UPDATE OF v`,
     [variantId]
   );
   if (!v) throw badRequest(`Product variant #${variantId} not found`);

@@ -9,6 +9,10 @@ on:
   push:
     tags: ['v*']
 
+env:
+  # Set in GitHub → Settings → Secrets and variables → Actions → Variables
+  VITE_API_URL: ${{ vars.BIKRIPRO_API_URL }}
+
 permissions:
   contents: write
 

@@ -10,6 +10,10 @@ on:
     paths: ['site/**', 'frontend/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
+env:
+  # Set in GitHub → Settings → Secrets and variables → Actions → Variables
+  VITE_API_URL: ${{ vars.BIKRIPRO_API_URL }}
+
 permissions:
   contents: read
   pages: write

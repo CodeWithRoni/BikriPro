@@ -6,7 +6,9 @@
  *   ("embedded server") so a single shop PC can be the server + till.
  *   Other tills, tablets and phones on the same Wi-Fi then connect to
  *   http://<this-PC-IP>:5000 (Login → Server).
- * - MySQL / MariaDB must be installed on the server PC (see docs/INSTALL.md).
+ * - Recommended: leave EMBEDDED_SERVER=0 and use the cloud API (Supabase +
+ *   Render, see docs/SUPABASE.md). For an offline shop, set EMBEDDED_SERVER=1
+ *   and DATABASE_URL to a local PostgreSQL.
  *
  * Config lives in <userData>/server.env (File → Server settings).
  */
@@ -41,7 +43,7 @@ function ensureConfig() {
   set('UPLOAD_DIR', path.join(USER, 'uploads').replace(/\\/g, '/'));
   set('NODE_ENV', 'production');
   set('CORS_ORIGINS', '*');
-  text += '\n# Set to 0 on till PCs that only connect to another BikriPro server\nEMBEDDED_SERVER=1\n';
+  text += '\n# 1 = run the BikriPro API on this PC (needs DATABASE_URL to a PostgreSQL / Supabase DB)\n# 0 = this PC only connects to a BikriPro server (cloud or another PC)\nEMBEDDED_SERVER=0\n';
   fs.writeFileSync(CONFIG, text);
 }
 
@@ -77,7 +79,7 @@ function startServer() {
         type: 'warning',
         title: 'BikriPro server stopped',
         message: 'The built-in BikriPro server could not start.',
-        detail: 'Usually MySQL/MariaDB is not running or the database settings are wrong.\n\nOpen File → Server settings, fix DB_HOST / DB_USER / DB_PASSWORD, then File → Restart server.\nIf this PC only connects to another BikriPro server, set EMBEDDED_SERVER=0.',
+        detail: 'Usually the database is not reachable or DATABASE_URL is wrong.\n\nOpen File → Server settings, fix DATABASE_URL, then File → Restart server.\nIf this PC only connects to the cloud / another BikriPro server, set EMBEDDED_SERVER=0.',
       });
     }
   });
