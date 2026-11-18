@@ -110,6 +110,8 @@ r.post('/accounts/:id/entry', M, finance.manualEntry);
 // ---------- Expenses ----------
 r.get('/expense-categories', finance.listExpenseCategories);
 r.post('/expense-categories', M, finance.createExpenseCategory);
+r.put('/expense-categories/:id', M, finance.updateExpenseCategory);
+r.delete('/expense-categories/:id', M, finance.deleteExpenseCategory);
 r.get('/expenses', M, finance.listExpenses);
 r.post('/expenses', M, finance.createExpense);
 

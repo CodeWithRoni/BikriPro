@@ -8,6 +8,7 @@
  *                     credit = decreases the balance
  */
 import { query, one, transaction } from '../config/db.js';
+import { addRange, orderBy } from '../utils/filters.js';
 import { asyncHandler, requireFields, badRequest, notFound, paging, money, today } from '../utils/http.js';
 import { logActivity } from '../utils/activity.js';
 
@@ -107,12 +108,24 @@ function build(type) {
       if (type === 'supplier') params.push(like);
     }
     if (req.query.area) { where.push('(t.area ILIKE ? OR t.address ILIKE ?)'); params.push(`%${req.query.area}%`, `%${req.query.area}%`); }
-    if (req.query.has_due === '1') where.push('b.balance > 0');
+    const qs = req.query;
+    if (qs.has_due === '1' || qs.balance === 'due') where.push('b.balance > 0');
+    else if (qs.balance === 'advance') where.push('b.balance < 0');
+    else if (qs.balance === 'clear') where.push('b.balance = 0');
+    addRange(where, params, qs, 'balance', 'b.balance');
+    if (type === 'customer' && qs.points === '1') where.push('t.loyalty_points > 0');
+    if (type === 'customer' && qs.birthday === 'month') where.push('t.dob IS NOT NULL AND EXTRACT(MONTH FROM t.dob) = EXTRACT(MONTH FROM bp_today())');
+    if (type === 'customer' && qs.overdue === '1') where.push('EXISTS (SELECT 1 FROM sales s WHERE s.customer_id = t.id AND s.due_amount > 0 AND s.next_payment_date <= bp_today())');
     const base = `FROM ${c.table} t JOIN ${c.view} b ON b.${c.viewFk} = t.id WHERE ${where.join(' AND ')}`;
     const [{ total, total_balance }] = await query(`SELECT COUNT(*) AS total, COALESCE(SUM(b.balance),0) AS total_balance ${base}`, params);
-    const sort = req.query.sort === 'balance' ? 'b.balance DESC' : 't.name';
+    const sort = orderBy(qs.sort, {
+      balance: 'b.balance DESC, t.name', balance_desc: 'b.balance DESC, t.name', balance_asc: 'b.balance ASC, t.name',
+      newest: 't.id DESC', name_desc: 't.name DESC',
+      ...(type === 'customer' ? { points: 't.loyalty_points DESC, t.name' } : {}),
+    }, 't.name');
     const rows = await query(`SELECT t.*, ROUND(b.balance, 2) AS balance ${base} ORDER BY ${sort} LIMIT ? OFFSET ?`, [...params, limit, offset]);
-    res.json({ data: rows, total, total_balance: money(total_balance), page, limit });
+    const areas = await query(`SELECT DISTINCT area FROM ${c.table} WHERE is_active AND COALESCE(area, '') <> '' ORDER BY area LIMIT 200`);
+    res.json({ data: rows, total, total_balance: money(total_balance), page, limit, areas: areas.map((a) => a.area) });
   });
 
   ctrl.get = asyncHandler(async (req, res) => {

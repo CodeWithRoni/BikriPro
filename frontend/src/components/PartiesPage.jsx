@@ -5,6 +5,7 @@ import api from '../api/client';
 import useApi from '../hooks/useApi';
 import PartyForm from './PartyForm';
 import { PageHeader, Pagination, Empty, Modal, Field, DateRange, useDebounced, PageLoader, Badge } from './ui';
+import FilterBar, { useFilters, toParams, Sum } from './FilterBar';
 import { tk, num, fmtDate, todayStr, downloadCsv, cls } from '../utils/format';
 import { printNode } from './receipt/Receipt';
 
@@ -20,13 +21,13 @@ const REASONS = {
 /** Shared list + ledger screen for the separate Customers and Suppliers menus. */
 export default function PartiesPage({ type, icon, title, subtitle }) {
   const [q, setQ] = useState('');
-  const [area, setArea] = useState('');
-  const [hasDue, setHasDue] = useState(false);
+  const [sort, setSort] = useState('name');
   const [page, setPage] = useState(1);
+  const [f, set, reset] = useFilters({ area: '', balance: '', balance_range: { min: '', max: '' }, overdue: false, points: false, birthday: '' }, () => setPage(1));
   const dq = useDebounced(q);
-  const darea = useDebounced(area);
+  const df = useDebounced(f, 350);
   const path = type === 'customer' ? '/customers' : '/suppliers';
-  const { data, loading, reload } = useApi(path, { q: dq, area: darea || undefined, has_due: hasDue ? 1 : undefined, page, sort: hasDue ? 'balance' : undefined });
+  const { data, loading, reload } = useApi(path, { q: dq || undefined, page, sort, ...toParams(df, { balance_range: 'balance' }) });
   const [form, setForm] = useState({ open: false, id: null });
   const [ledgerOf, setLedgerOf] = useState(null);
 
@@ -42,12 +43,18 @@ export default function PartiesPage({ type, icon, title, subtitle }) {
           <button type="button" className="btn-secondary" onClick={() => downloadCsv(`${type}s.csv`, data?.data)}><Download className="h-4 w-4" /> Export</button>
           <button type="button" className="btn-primary" onClick={() => setForm({ open: true, id: null })}><Plus className="h-4 w-4" /> New {type}</button>
         </>} />
-      <div className="card mb-4 flex flex-wrap items-center gap-3 p-3">
-        <div className="relative min-w-[220px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className="input pl-9" placeholder="Name, phone…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></div>
-        <input className="input w-48" placeholder="Filter by area / address" value={area} onChange={(e) => { setArea(e.target.value); setPage(1); }} />
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-ocean-600" checked={hasDue} onChange={(e) => setHasDue(e.target.checked)} /> {type === 'customer' ? 'Has due' : 'We owe'}</label>
-        {data && <span className="ml-auto text-sm">Total balance: <b className="text-rose-600">{tk(data.total_balance)}</b></span>}
-      </div>
+      <FilterBar
+        search={{ value: q, onChange: (v) => { setQ(v); setPage(1); }, placeholder: type === 'customer' ? 'Name, phone or any contact…' : 'Name, company, phone or any contact…' }}
+        sort={{ value: sort, onChange: (v) => { setSort(v); setPage(1); }, options: [['name', 'Name A–Z'], ['name_desc', 'Name Z–A'], ['newest', 'Newest first'], ['balance_desc', type === 'customer' ? 'Highest due first' : 'We owe most first'], ['balance_asc', 'Lowest balance first'], ...(type === 'customer' ? [['points', 'Most loyalty points']] : [])] }}
+        values={f} onChange={set} onClear={reset}
+        fields={[
+          { key: 'area', label: 'Area', type: 'select', options: (data?.areas || []).map((a) => [a, a]), placeholder: 'All areas' },
+          { key: 'balance_range', label: `${type === 'customer' ? 'Receivable' : 'Payable'} (৳)`, type: 'range' },
+          ...(type === 'customer' ? [{ key: 'birthday', label: 'Birthday', type: 'select', options: [['month', 'Birthday this month']], placeholder: 'Any' }] : []),
+          { key: 'balance', label: 'Balance', type: 'segment', options: type === 'customer' ? [['due', 'Has due'], ['advance', 'Advance paid'], ['clear', 'Settled']] : [['due', 'We owe'], ['advance', 'Advance given'], ['clear', 'Settled']] },
+          ...(type === 'customer' ? [{ key: 'overdue', label: 'Overdue payment', type: 'toggle' }, { key: 'points', label: 'Has loyalty points', type: 'toggle' }] : []),
+        ]}
+        summary={data && <><Sum label={type === 'customer' ? 'Customers' : 'Suppliers'} value={num(data.total)} /><Sum label="Total balance" value={tk(data.total_balance)} tone="rose" /></>} />
       {loading && !data ? <PageLoader /> : (
         <div className="table-wrap">
           <table className="table">

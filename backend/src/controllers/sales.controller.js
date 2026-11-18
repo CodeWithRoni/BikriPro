@@ -1,4 +1,5 @@
 import { query, one, transaction } from '../config/db.js';
+import { addRange, orderBy } from '../utils/filters.js';
 import { asyncHandler, requireFields, badRequest, notFound, paging, money, today } from '../utils/http.js';
 import { logActivity } from '../utils/activity.js';
 import { nextNumber } from '../utils/numbering.js';
@@ -184,15 +185,26 @@ export const list = asyncHandler(async (req, res) => {
   if (req.query.from) { where.push('DATE(s.sale_date) >= ?'); params.push(req.query.from); }
   if (req.query.to) { where.push('DATE(s.sale_date) <= ?'); params.push(req.query.to); }
   if (req.query.customer_id) { where.push('s.customer_id = ?'); params.push(req.query.customer_id); }
-  if (req.query.due_only === '1') where.push('s.due_amount > 0');
-  if (req.query.q) { where.push('(s.invoice_no ILIKE ? OR c.name ILIKE ? OR c.phone ILIKE ?)'); const l = `%${req.query.q}%`; params.push(l, l, l); }
+  const qs = req.query;
+  if (qs.due_only === '1') where.push('s.due_amount > 0');
+  if (qs.status) { where.push('s.status = ?'); params.push(qs.status); }
+  if (qs.pay === 'paid') where.push('s.due_amount <= 0');
+  else if (qs.pay === 'due') where.push('s.due_amount > 0');
+  else if (qs.pay === 'overdue') where.push('s.due_amount > 0 AND s.next_payment_date IS NOT NULL AND s.next_payment_date <= bp_today()');
+  if (qs.walk_in === '1') where.push('(s.customer_id IS NULL OR c.is_walk_in)');
+  if (qs.method) { where.push('EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = s.id AND sp.method = ?)'); params.push(qs.method); }
+  if (qs.account_id) { where.push('EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = s.id AND sp.account_id = ?)'); params.push(qs.account_id); }
+  if (qs.user_id) { where.push('s.user_id = ?'); params.push(qs.user_id); }
+  addRange(where, params, qs, 'amount', 's.grand_total');
+  if (qs.q) { where.push('(s.invoice_no ILIKE ? OR c.name ILIKE ? OR c.phone ILIKE ?)'); const l = `%${qs.q}%`; params.push(l, l, l); }
   const base = `FROM sales s LEFT JOIN customers c ON c.id = s.customer_id LEFT JOIN users u ON u.id = s.user_id WHERE ${where.join(' AND ')}`;
+  const order = orderBy(qs.sort, { oldest: 's.id ASC', amount_desc: 's.grand_total DESC, s.id DESC', amount_asc: 's.grand_total ASC, s.id DESC', due_desc: 's.due_amount DESC, s.id DESC' }, 's.id DESC');
   const [sum] = await query(`SELECT COUNT(*) AS total, COALESCE(SUM(s.grand_total),0) AS amount, COALESCE(SUM(s.paid_amount),0) AS paid, COALESCE(SUM(s.due_amount),0) AS due ${base}`, params);
   const rows = await query(
     `SELECT s.id, s.invoice_no, s.sale_date, s.grand_total, s.paid_amount, s.due_amount, s.next_payment_date, s.status,
             c.name AS customer_name, c.phone AS customer_phone, u.name AS cashier,
             (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) AS item_count
-     ${base} ORDER BY s.id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);
+     ${base} ORDER BY ${order} LIMIT ? OFFSET ?`, [...params, limit, offset]);
   res.json({ data: rows, summary: sum, total: sum.total, page, limit });
 });
 
@@ -302,16 +314,23 @@ export const createReturn = asyncHandler(async (req, res) => {
 
 export const listReturns = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query);
+  const qs = req.query;
   const where = ['1=1'];
   const params = [];
-  if (req.query.from) { where.push('DATE(r.return_date) >= ?'); params.push(req.query.from); }
-  if (req.query.to) { where.push('DATE(r.return_date) <= ?'); params.push(req.query.to); }
-  if (req.query.q) { where.push('(r.return_no ILIKE ? OR s.invoice_no ILIKE ? OR c.name ILIKE ?)'); const l = `%${req.query.q}%`; params.push(l, l, l); }
-  const rows = await query(
-    `SELECT r.*, s.invoice_no, c.name AS customer_name, u.name AS user_name FROM sale_returns r
-     JOIN sales s ON s.id = r.sale_id LEFT JOIN customers c ON c.id = r.customer_id LEFT JOIN users u ON u.id = r.user_id
-     WHERE ${where.join(' AND ')} ORDER BY r.id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);
-  res.json({ data: rows, page, limit });
+  if (qs.from) { where.push('DATE(r.return_date) >= ?'); params.push(qs.from); }
+  if (qs.to) { where.push('DATE(r.return_date) <= ?'); params.push(qs.to); }
+  if (qs.customer_id) { where.push('r.customer_id = ?'); params.push(qs.customer_id); }
+  if (qs.refund === 'cash') where.push('r.refund_amount > 0');
+  else if (qs.refund === 'credit') where.push('r.refund_amount < r.total_amount');
+  if (qs.walk_in === '1') where.push('(r.customer_id IS NULL OR c.is_walk_in)');
+  addRange(where, params, qs, 'amount', 'r.total_amount');
+  if (qs.q) { where.push('(r.return_no ILIKE ? OR s.invoice_no ILIKE ? OR c.name ILIKE ? OR r.reason ILIKE ?)'); const l = `%${qs.q}%`; params.push(l, l, l, l); }
+  const base = `FROM sale_returns r JOIN sales s ON s.id = r.sale_id LEFT JOIN customers c ON c.id = r.customer_id LEFT JOIN users u ON u.id = r.user_id
+     WHERE ${where.join(' AND ')}`;
+  const [sum] = await query(`SELECT COUNT(*) AS total, COALESCE(SUM(r.total_amount),0) AS amount, COALESCE(SUM(r.refund_amount),0) AS refunded ${base}`, params);
+  const order = orderBy(qs.sort, { oldest: 'r.id ASC', amount_desc: 'r.total_amount DESC, r.id DESC', amount_asc: 'r.total_amount ASC, r.id DESC' }, 'r.id DESC');
+  const rows = await query(`SELECT r.*, s.invoice_no, c.name AS customer_name, u.name AS user_name ${base} ORDER BY ${order} LIMIT ? OFFSET ?`, [...params, limit, offset]);
+  res.json({ data: rows, summary: sum, total: sum.total, page, limit });
 });
 
 export const getReturn = asyncHandler(async (req, res) => {

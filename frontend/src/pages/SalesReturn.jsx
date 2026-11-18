@@ -3,9 +3,10 @@ import { Undo2, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import useApi from '../hooks/useApi';
-import { PageHeader, Empty, Field, Spinner } from '../components/ui';
+import { PageHeader, Empty, Field, Spinner, Pagination, useDebounced } from '../components/ui';
+import FilterBar, { useFilters, toParams, Sum } from '../components/FilterBar';
 import { AccountSelect } from '../components/Pickers';
-import { tk, fmtDateTime, num } from '../utils/format';
+import { tk, fmtDateTime, num, monthStart, todayStr } from '../utils/format';
 
 export default function SalesReturn() {
   const [invNo, setInvNo] = useState('');
@@ -16,7 +17,7 @@ export default function SalesReturn() {
   const [account, setAccount] = useState(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
-  const list = useApi('/sales/returns');
+  const [reloadKey, setReload] = useState(0);
 
   const find = async (e) => {
     e?.preventDefault();
@@ -39,7 +40,7 @@ export default function SalesReturn() {
     try {
       const { data } = await api.post('/sales/returns', { sale_id: sale.id, items, refund_amount: refund === '' ? undefined : Number(refund), account_id: account, reason });
       toast.success(`${data.return_no}: ${tk(data.total)} returned, ${tk(data.refund)} refunded`);
-      setSale(null); setInvNo(''); list.reload();
+      setSale(null); setInvNo(''); setReload((n) => n + 1);
     } catch (e) { toast.error(e.message); } finally { setBusy(false); }
   };
 
@@ -86,16 +87,46 @@ export default function SalesReturn() {
         </div>
       )}
 
-      <h3 className="mb-2 font-bold">Recent returns</h3>
+      <ReturnHistory key={reloadKey} />
+    </div>
+  );
+}
+
+function ReturnHistory() {
+  const [from, setFrom] = useState(monthStart());
+  const [to, setTo] = useState(todayStr());
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState('newest');
+  const [page, setPage] = useState(1);
+  const [f, set, reset] = useFilters({ customer_id: null, refund: '', amount: { min: '', max: '' }, walk_in: false }, () => setPage(1));
+  const dq = useDebounced(q);
+  const df = useDebounced(f, 350);
+  const { data } = useApi('/sales/returns', { from: from || undefined, to: to || undefined, q: dq || undefined, sort, page, ...toParams(df) });
+  return (
+    <>
+      <h3 className="mb-2 font-bold">Return history</h3>
+      <FilterBar
+        search={{ value: q, onChange: (v) => { setQ(v); setPage(1); }, placeholder: 'Return no, invoice no, customer or reason…' }}
+        date={{ from, to, onChange: (a, b) => { setFrom(a); setTo(b); setPage(1); } }} defaultDate={[monthStart(), todayStr()]}
+        sort={{ value: sort, onChange: setSort, options: [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['amount_desc', 'Value: high → low'], ['amount_asc', 'Value: low → high']] }}
+        values={f} onChange={set} onClear={reset}
+        fields={[
+          { key: 'customer_id', label: 'Customer', type: 'party', party: 'customer' },
+          { key: 'amount', label: 'Return value (৳)', type: 'range' },
+          { key: 'refund', label: 'Settled by', type: 'segment', options: [['cash', 'Cash refund'], ['credit', 'Credited to due']] },
+          { key: 'walk_in', label: 'Walk-in only', type: 'toggle' },
+        ]}
+        summary={data?.summary && <><Sum label="Returns" value={num(data.summary.total)} /><Sum label="Value" value={tk(data.summary.amount)} tone="rose" /><Sum label="Refunded" value={tk(data.summary.refunded)} /></>} />
       <div className="table-wrap">
         <table className="table">
           <thead><tr><th>Return</th><th>Invoice</th><th>Date</th><th>Customer</th><th className="text-right">Value</th><th className="text-right">Refunded</th><th>Reason</th></tr></thead>
-          <tbody>{list.data?.data.map((r) => (
+          <tbody>{data?.data.map((r) => (
             <tr key={r.id}><td className="font-semibold">{r.return_no}</td><td>{r.invoice_no}</td><td>{fmtDateTime(r.return_date)}</td><td>{r.customer_name || 'Walk-in'}</td><td className="text-right">{tk(r.total_amount)}</td><td className="text-right">{tk(r.refund_amount)}</td><td className="text-slate-500">{r.reason}</td></tr>
           ))}</tbody>
         </table>
-        {!list.data?.data.length && <Empty title="No returns yet" />}
+        {!data?.data.length && <Empty title="No returns match these filters" />}
+        <Pagination page={page} limit={data?.limit} total={data?.total} onPage={setPage} />
       </div>
-    </div>
+    </>
   );
 }

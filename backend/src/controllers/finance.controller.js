@@ -2,6 +2,7 @@
  * Cash, Bank & MFS accounts · Supplier Payments · Customer Collections · Expenses
  */
 import { query, one, transaction } from '../config/db.js';
+import { addRange, orderBy } from '../utils/filters.js';
 import { asyncHandler, requireFields, badRequest, notFound, paging, money, today } from '../utils/http.js';
 import { logActivity } from '../utils/activity.js';
 import { nextNumber } from '../utils/numbering.js';
@@ -116,6 +117,20 @@ export const createPayment = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
+/** Common filters for money lists (payments, collections, expenses): account, account type, amount range, text search. */
+function moneyFilters(where, params, qs, searchCols) {
+  if (qs.account_id) { where.push('x.account_id = ?'); params.push(qs.account_id); }
+  if (qs.method) { where.push('a.type = ?'); params.push(qs.method); }
+  addRange(where, params, qs, 'amount', 'x.amount');
+  if (qs.q && searchCols?.length) {
+    where.push(`(${searchCols.map((c) => `${c} ILIKE ?`).join(' OR ')})`);
+    for (let i = 0; i < searchCols.length; i += 1) params.push(`%${qs.q}%`);
+  }
+}
+const moneyOrder = (sort, dateCol) => orderBy(sort, {
+  oldest: `${dateCol} ASC, x.id ASC`, amount_desc: 'x.amount DESC, x.id DESC', amount_asc: 'x.amount ASC, x.id DESC',
+}, `${dateCol} DESC, x.id DESC`);
+
 export const listPayments = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query);
   const where = ['1=1'];
@@ -123,11 +138,13 @@ export const listPayments = asyncHandler(async (req, res) => {
   if (req.query.from) { where.push('x.payment_date >= ?'); params.push(req.query.from); }
   if (req.query.to) { where.push('x.payment_date <= ?'); params.push(req.query.to); }
   if (req.query.supplier_id) { where.push('x.supplier_id = ?'); params.push(req.query.supplier_id); }
+  moneyFilters(where, params, req.query, ['x.voucher_no', 's.name', 'x.trx_ref', 'x.note']);
   const base = `FROM supplier_payments x JOIN suppliers s ON s.id = x.supplier_id JOIN accounts a ON a.id = x.account_id
     LEFT JOIN purchases p ON p.id = x.purchase_id LEFT JOIN users u ON u.id = x.user_id WHERE ${where.join(' AND ')}`;
   const [sum] = await query(`SELECT COUNT(*) AS total, COALESCE(SUM(x.amount),0) AS amount ${base}`, params);
-  const rows = await query(`SELECT x.*, s.name AS supplier_name, a.name AS account_name, p.invoice_no, u.name AS user_name ${base} ORDER BY x.id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);
-  res.json({ data: rows, summary: sum, page, limit });
+  sum.by_type = await query(`SELECT a.type, COALESCE(SUM(x.amount),0) AS amount ${base} GROUP BY a.type ORDER BY amount DESC`, params);
+  const rows = await query(`SELECT x.*, s.name AS supplier_name, a.name AS account_name, a.type AS account_type, p.invoice_no, u.name AS user_name ${base} ORDER BY ${moneyOrder(req.query.sort, 'x.payment_date')} LIMIT ? OFFSET ?`, [...params, limit, offset]);
+  res.json({ data: rows, summary: sum, total: sum.total, page, limit });
 });
 
 /** GET /payments/payables — suppliers we owe, biggest first */
@@ -180,11 +197,13 @@ export const listCollections = asyncHandler(async (req, res) => {
   if (req.query.from) { where.push('x.collection_date >= ?'); params.push(req.query.from); }
   if (req.query.to) { where.push('x.collection_date <= ?'); params.push(req.query.to); }
   if (req.query.customer_id) { where.push('x.customer_id = ?'); params.push(req.query.customer_id); }
+  moneyFilters(where, params, req.query, ['x.receipt_no', 'c.name', 'c.phone', 'x.trx_ref', 'x.note']);
   const base = `FROM customer_collections x JOIN customers c ON c.id = x.customer_id JOIN accounts a ON a.id = x.account_id
     LEFT JOIN sales s ON s.id = x.sale_id LEFT JOIN users u ON u.id = x.user_id WHERE ${where.join(' AND ')}`;
   const [sum] = await query(`SELECT COUNT(*) AS total, COALESCE(SUM(x.amount),0) AS amount ${base}`, params);
-  const rows = await query(`SELECT x.*, c.name AS customer_name, c.phone AS customer_phone, a.name AS account_name, s.invoice_no, u.name AS user_name ${base} ORDER BY x.id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);
-  res.json({ data: rows, summary: sum, page, limit });
+  sum.by_type = await query(`SELECT a.type, COALESCE(SUM(x.amount),0) AS amount ${base} GROUP BY a.type ORDER BY amount DESC`, params);
+  const rows = await query(`SELECT x.*, c.name AS customer_name, c.phone AS customer_phone, a.name AS account_name, a.type AS account_type, s.invoice_no, u.name AS user_name ${base} ORDER BY ${moneyOrder(req.query.sort, 'x.collection_date')} LIMIT ? OFFSET ?`, [...params, limit, offset]);
+  res.json({ data: rows, summary: sum, total: sum.total, page, limit });
 });
 
 /** GET /collections/receivables?area=&overdue=1 — customers who owe us */
@@ -204,11 +223,28 @@ export const receivables = asyncHandler(async (req, res) => {
 });
 
 // ---------- Expenses ----------
-export const listExpenseCategories = asyncHandler(async (req, res) => res.json(await query('SELECT * FROM expense_categories ORDER BY name')));
+export const listExpenseCategories = asyncHandler(async (req, res) => res.json(await query(
+  `SELECT ec.*, (SELECT COUNT(*) FROM expenses e WHERE e.category_id = ec.id) AS expense_count,
+     (SELECT COALESCE(SUM(e.amount),0) FROM expenses e WHERE e.category_id = ec.id) AS total_amount
+   FROM expense_categories ec ORDER BY ec.name`)));
+const dupeCat = (e) => { if (e?.code === '23505') throw badRequest('This expense category already exists'); throw e; };
 export const createExpenseCategory = asyncHandler(async (req, res) => {
   requireFields(req.body, ['name']);
-  const r = await query('INSERT INTO expense_categories (name) VALUES (?)', [req.body.name.trim()]);
-  res.status(201).json({ id: r.insertId });
+  const r = await query('INSERT INTO expense_categories (name) VALUES (?)', [req.body.name.trim()]).catch(dupeCat);
+  await logActivity(req, 'expenses', 'create_category', r.insertId, req.body.name);
+  res.status(201).json({ id: r.insertId, name: req.body.name.trim() });
+});
+export const updateExpenseCategory = asyncHandler(async (req, res) => {
+  requireFields(req.body, ['name']);
+  await query('UPDATE expense_categories SET name = ? WHERE id = ?', [req.body.name.trim(), req.params.id]).catch(dupeCat);
+  await logActivity(req, 'expenses', 'update_category', req.params.id, req.body.name);
+  res.json({ message: 'Updated' });
+});
+/** Deleting a category keeps its expenses; they show as "Other". */
+export const deleteExpenseCategory = asyncHandler(async (req, res) => {
+  await query('DELETE FROM expense_categories WHERE id = ?', [req.params.id]);
+  await logActivity(req, 'expenses', 'delete_category', req.params.id);
+  res.json({ message: 'Deleted' });
 });
 
 export const createExpense = asyncHandler(async (req, res) => {
@@ -228,12 +264,19 @@ export const createExpense = asyncHandler(async (req, res) => {
 
 export const listExpenses = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query);
+  const qs = req.query;
   const where = ['1=1'];
   const params = [];
-  if (req.query.from) { where.push('e.expense_date >= ?'); params.push(req.query.from); }
-  if (req.query.to) { where.push('e.expense_date <= ?'); params.push(req.query.to); }
-  const base = `FROM expenses e LEFT JOIN expense_categories ec ON ec.id = e.category_id JOIN accounts a ON a.id = e.account_id WHERE ${where.join(' AND ')}`;
-  const [sum] = await query(`SELECT COALESCE(SUM(e.amount),0) AS amount ${base}`, params);
-  const rows = await query(`SELECT e.*, ec.name AS category, a.name AS account_name ${base} ORDER BY e.expense_date DESC, e.id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);
-  res.json({ data: rows, summary: sum, page, limit });
+  if (qs.from) { where.push('x.expense_date >= ?'); params.push(qs.from); }
+  if (qs.to) { where.push('x.expense_date <= ?'); params.push(qs.to); }
+  if (qs.category_id === 'none') where.push('x.category_id IS NULL');
+  else if (qs.category_id) { where.push('x.category_id = ?'); params.push(qs.category_id); }
+  moneyFilters(where, params, qs, ['x.note', 'ec.name']);
+  const base = `FROM expenses x LEFT JOIN expense_categories ec ON ec.id = x.category_id JOIN accounts a ON a.id = x.account_id LEFT JOIN users u ON u.id = x.user_id WHERE ${where.join(' AND ')}`;
+  const [sum] = await query(`SELECT COUNT(*) AS total, COALESCE(SUM(x.amount),0) AS amount, COALESCE(MAX(x.amount),0) AS largest ${base}`, params);
+  sum.by_category = await query(`SELECT x.category_id, COALESCE(ec.name, 'Other') AS category, COUNT(*) AS n, SUM(x.amount) AS amount ${base}
+    GROUP BY x.category_id, ec.name ORDER BY amount DESC`, params);
+  const rows = await query(`SELECT x.*, ec.name AS category, a.name AS account_name, a.type AS account_type, u.name AS user_name ${base}
+    ORDER BY ${moneyOrder(qs.sort, 'x.expense_date')} LIMIT ? OFFSET ?`, [...params, limit, offset]);
+  res.json({ data: rows, summary: sum, total: sum.total, page, limit });
 });

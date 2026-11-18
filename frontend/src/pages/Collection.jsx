@@ -1,21 +1,40 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { HandCoins, Phone, CalendarClock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import useApi from '../hooks/useApi';
 import { PartyPicker, AccountSelect } from '../components/Pickers';
-import { PageHeader, Field, Empty, Tabs, DateRange, Spinner, useDebounced, Badge } from '../components/ui';
-import { tk, fmtDate, todayStr, addDays, monthStart, cls } from '../utils/format';
+import { PageHeader, Field, Empty, Tabs, Spinner, useDebounced, Badge, Pagination } from '../components/ui';
+import FilterBar, { useFilters, toParams, Sum, METHODS } from '../components/FilterBar';
+import { tk, num, fmtDate, todayStr, addDays, monthStart, cls } from '../utils/format';
 
 /** Collection — receivables from credit customers. */
 export default function Collection() {
   const [params, setParams] = useSearchParams();
   const [tab, setTab] = useState('due');
-  const [area, setArea] = useState('');
-  const [overdue, setOverdue] = useState(false);
-  const darea = useDebounced(area);
-  const recv = useApi('/collections/receivables', { area: darea || undefined, overdue: overdue ? 1 : undefined });
+  const recv = useApi('/collections/receivables');
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState('next_date');
+  const [rf, setRf, resetRf] = useFilters({ area: '', when: '', amount: { min: '', max: '' } });
+  const rows = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    const t = todayStr();
+    const week = addDays(7);
+    const list = (recv.data || []).filter((r) => (!s || `${r.name} ${r.phone || ''}`.toLowerCase().includes(s))
+      && (!rf.area || r.area === rf.area)
+      && (rf.amount.min === '' || r.balance >= Number(rf.amount.min)) && (rf.amount.max === '' || r.balance <= Number(rf.amount.max))
+      && (!rf.when || (rf.when === 'overdue' ? r.overdue && r.next_payment_date < t
+        : rf.when === 'today' ? r.next_payment_date === t
+          : rf.when === 'week' ? r.next_payment_date && r.next_payment_date > t && r.next_payment_date <= week
+            : !r.next_payment_date)));
+    const by = {
+      next_date: (a, b) => String(a.next_payment_date || '9999').localeCompare(String(b.next_payment_date || '9999')) || b.balance - a.balance,
+      due_desc: (a, b) => b.balance - a.balance, due_asc: (a, b) => a.balance - b.balance, name: (a, b) => a.name.localeCompare(b.name),
+    }[sort];
+    return [...list].sort(by);
+  }, [recv.data, q, rf, sort]);
+  const areas = [...new Set((recv.data || []).map((r) => r.area).filter(Boolean))].sort();
   const [customer, setCustomer] = useState(null);
 
   useEffect(() => {
@@ -33,15 +52,20 @@ export default function Collection() {
           <Tabs tabs={[['due', 'Receivables'], ['history', 'Collection history']]} value={tab} onChange={setTab} />
           {tab === 'due' ? (
             <>
-              <div className="card mb-3 flex flex-wrap items-center gap-3 p-3">
-                <input className="input w-56" placeholder="Filter by area / address" value={area} onChange={(e) => setArea(e.target.value)} />
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-ocean-600" checked={overdue} onChange={(e) => setOverdue(e.target.checked)} /> Overdue / due today only</label>
-                <span className="ml-auto text-sm">Total: <b className="text-rose-600">{tk((recv.data || []).reduce((s, r) => s + r.balance, 0))}</b></span>
-              </div>
+              <FilterBar
+                search={{ value: q, onChange: setQ, placeholder: 'Customer name or phone…' }}
+                sort={{ value: sort, onChange: setSort, options: [['next_date', 'Next payment date'], ['due_desc', 'Highest due first'], ['due_asc', 'Lowest due first'], ['name', 'Name A–Z']] }}
+                values={rf} onChange={setRf} onClear={resetRf}
+                fields={[
+                  { key: 'area', label: 'Area', type: 'select', options: areas.map((a) => [a, a]), placeholder: 'All areas' },
+                  { key: 'amount', label: 'Due amount (৳)', type: 'range' },
+                  { key: 'when', label: 'Payment date', type: 'segment', options: [['overdue', 'Overdue'], ['today', 'Due today'], ['week', 'Next 7 days'], ['none', 'No date set']] },
+                ]}
+                summary={<><Sum label="Customers" value={num(rows.length)} /><Sum label="Total due" value={tk(rows.reduce((t, r) => t + r.balance, 0))} tone="rose" /><Sum label="Due now" value={num(rows.filter((r) => r.overdue).length)} tone="amber" /></>} />
               <div className="table-wrap">
                 <table className="table">
                   <thead><tr><th>Customer</th><th>Area</th><th>Next payment</th><th>Last paid</th><th className="text-right">Due</th><th /></tr></thead>
-                  <tbody>{recv.data?.map((r) => (
+                  <tbody>{rows.map((r) => (
                     <tr key={r.id} className={cls(customer?.id === r.id && 'bg-ocean-50 dark:bg-ocean-900/20')}>
                       <td className="font-semibold">{r.name}<div className="flex items-center gap-1 text-xs font-normal text-slate-500"><Phone className="h-3 w-3" />{r.phone || '—'}</div></td>
                       <td className="text-slate-500">{r.area || r.address || '—'}</td>
@@ -52,7 +76,7 @@ export default function Collection() {
                     </tr>
                   ))}</tbody>
                 </table>
-                {!recv.data?.length && <Empty title="No dues 🎉" hint="Every customer is settled." />}
+                {!rows.length && (recv.data?.length ? <Empty title="No customer matches these filters" /> : <Empty title="No dues 🎉" hint="Every customer is settled." />)}
               </div>
             </>
           ) : <History />}
@@ -112,15 +136,32 @@ function CollectForm({ customer, onCustomer, onDone }) {
 function History() {
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayStr());
-  const { data } = useApi('/collections', { from, to });
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState('newest');
+  const [page, setPage] = useState(1);
+  const [f, set, reset] = useFilters({ customer_id: null, method: '', account_id: '', amount: { min: '', max: '' } }, () => setPage(1));
+  const dq = useDebounced(q);
+  const df = useDebounced(f, 350);
+  const { data } = useApi('/collections', { from: from || undefined, to: to || undefined, q: dq || undefined, sort, page, ...toParams(df) });
   return (
     <>
-      <div className="card mb-3 p-3"><DateRange from={from} to={to} onChange={(a, b) => { setFrom(a); setTo(b); }} /></div>
-      <p className="mb-2 text-sm">Total collected: <b className="text-emerald-600">{tk(data?.summary.amount)}</b></p>
+      <FilterBar
+        search={{ value: q, onChange: (v) => { setQ(v); setPage(1); }, placeholder: 'Receipt no, customer, phone, TrxID or note…' }}
+        date={{ from, to, onChange: (a, b) => { setFrom(a); setTo(b); setPage(1); } }} defaultDate={[monthStart(), todayStr()]}
+        sort={{ value: sort, onChange: setSort, options: [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['amount_desc', 'Amount: high → low'], ['amount_asc', 'Amount: low → high']] }}
+        values={f} onChange={set} onClear={reset}
+        fields={[
+          { key: 'customer_id', label: 'Customer', type: 'party', party: 'customer' },
+          { key: 'account_id', label: 'Received in', type: 'account' },
+          { key: 'amount', label: 'Amount (৳)', type: 'range' },
+          { key: 'method', label: 'Method', type: 'segment', options: METHODS.map(([v, l]) => [v, l.replace(' (MFS)', '')]) },
+        ]}
+        summary={data?.summary && <><Sum label="Collections" value={num(data.summary.total)} /><Sum label="Collected" value={tk(data.summary.amount)} tone="green" />{data.summary.by_type?.map((t) => <span key={t.type} className="text-xs uppercase">{t.type} <b className="text-slate-700 dark:text-slate-200">{tk(t.amount)}</b></span>)}</>} />
       <div className="table-wrap"><table className="table">
         <thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>Account</th><th>Ref</th><th className="text-right">Amount</th></tr></thead>
-        <tbody>{data?.data.map((c) => <tr key={c.id}><td className="font-semibold">{c.receipt_no}</td><td>{fmtDate(c.collection_date)}</td><td>{c.customer_name}</td><td>{c.account_name}</td><td className="text-xs text-slate-500">{c.trx_ref}</td><td className="text-right font-semibold text-emerald-600">{tk(c.amount)}</td></tr>)}</tbody>
-      </table>{!data?.data.length && <Empty title="No collections in this period" />}</div>
+        <tbody>{data?.data.map((c) => <tr key={c.id}><td className="font-semibold">{c.receipt_no}</td><td>{fmtDate(c.collection_date)}</td><td>{c.customer_name}<div className="text-xs text-slate-500">{c.customer_phone}</div></td><td>{c.account_name}<div className="text-[11px] uppercase text-slate-400">{c.account_type}</div></td><td className="text-xs text-slate-500">{c.trx_ref}</td><td className="text-right font-semibold text-emerald-600">{tk(c.amount)}</td></tr>)}</tbody>
+      </table>{!data?.data.length && <Empty title="No collections match these filters" />}
+      <Pagination page={page} limit={data?.limit} total={data?.total} onPage={setPage} /></div>
     </>
   );
 }

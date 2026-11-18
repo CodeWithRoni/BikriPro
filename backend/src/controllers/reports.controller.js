@@ -2,6 +2,7 @@
  * Dashboard · Profit · Report Hub · Price Manager · Activity Log
  */
 import { query, transaction } from '../config/db.js';
+import { addRange, orderBy } from '../utils/filters.js';
 import { asyncHandler, badRequest, paging, money, today } from '../utils/http.js';
 import { logActivity } from '../utils/activity.js';
 
@@ -183,9 +184,17 @@ export const priceList = asyncHandler(async (req, res) => {
     case 'below_cost': where.push('v.retail_price IS NOT NULL AND v.retail_price < v.purchase_price'); break;
     default: break;
   }
-  if (req.query.category_id) { where.push('p.category_id = ?'); params.push(req.query.category_id); }
-  if (req.query.brand_id) { where.push('p.brand_id = ?'); params.push(req.query.brand_id); }
-  if (req.query.q) { where.push('(p.name ILIKE ? OR v.sku ILIKE ? OR v.barcode = ?)'); params.push(`%${req.query.q}%`, `%${req.query.q}%`, req.query.q); }
+  const qs = req.query;
+  if (qs.subcategory_id) { where.push('p.category_id = ?'); params.push(qs.subcategory_id); }
+  else if (qs.category_id) { where.push('p.category_id IN (SELECT id FROM categories WHERE id = ? OR parent_id = ?)'); params.push(qs.category_id, qs.category_id); }
+  if (qs.brand_id) { where.push('p.brand_id = ?'); params.push(qs.brand_id); }
+  if (qs.size) { where.push('v.size = ?'); params.push(qs.size); }
+  if (qs.color) { where.push('v.color = ?'); params.push(qs.color); }
+  if (qs.stock === 'in') where.push('v.stock_qty > 0');
+  else if (qs.stock === 'out') where.push('v.stock_qty <= 0');
+  addRange(where, params, qs, 'retail', 'v.retail_price');
+  addRange(where, params, qs, 'cost', 'v.purchase_price');
+  if (qs.q) { where.push('(p.name ILIKE ? OR v.sku ILIKE ? OR v.barcode = ?)'); params.push(`%${qs.q}%`, `%${qs.q}%`, qs.q); }
   const base = `FROM product_variants v JOIN products p ON p.id = v.product_id LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN brands b ON b.id = p.brand_id WHERE ${where.join(' AND ')}`;
   const [{ total }] = await query(`SELECT COUNT(*) AS total ${base}`, params);
@@ -198,7 +207,11 @@ export const priceList = asyncHandler(async (req, res) => {
   const rows = await query(
     `SELECT v.id AS variant_id, p.id AS product_id, p.name, c.name AS category, b.name AS brand, v.sku, v.size, v.color,
             v.purchase_price, v.retail_price, v.wholesale_price, v.stock_qty
-     ${base} ORDER BY p.name, v.size LIMIT ? OFFSET ?`, [...params, limit, offset]);
+     ${base} ORDER BY ${orderBy(qs.sort, {
+       retail_desc: 'v.retail_price DESC NULLS LAST, p.name', retail_asc: 'v.retail_price ASC NULLS FIRST, p.name',
+       margin_asc: '(v.retail_price - v.purchase_price) ASC NULLS FIRST, p.name', margin_desc: '(v.retail_price - v.purchase_price) DESC NULLS LAST, p.name',
+       newest: 'v.id DESC',
+     }, 'p.name, v.size')} LIMIT ? OFFSET ?`, [...params, limit, offset]);
   res.json({ data: rows, total, counts, page, limit });
 });
 

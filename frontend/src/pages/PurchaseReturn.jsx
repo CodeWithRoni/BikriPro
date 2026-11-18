@@ -3,13 +3,14 @@ import { PackageMinus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import useApi from '../hooks/useApi';
-import { PageHeader, Empty, Field, Spinner } from '../components/ui';
+import { PageHeader, Empty, Field, Spinner, Pagination, useDebounced } from '../components/ui';
+import FilterBar, { useFilters, toParams, Sum } from '../components/FilterBar';
 import { AccountSelect } from '../components/Pickers';
-import { tk, fmtDate, num, todayStr } from '../utils/format';
+import { tk, fmtDate, num, todayStr, monthStart } from '../utils/format';
 
 export default function PurchaseReturn() {
   const recent = useApi('/purchases', { limit: 50 });
-  const list = useApi('/purchases/returns');
+  const [reloadKey, setReload] = useState(0);
   const [pur, setPur] = useState(null);
   const [qty, setQty] = useState({});
   const [refund, setRefund] = useState('');
@@ -29,7 +30,7 @@ export default function PurchaseReturn() {
     try {
       const { data } = await api.post('/purchases/returns', { purchase_id: pur.id, items, refund_amount: Number(refund) || 0, account_id: account, reason, return_date: date });
       toast.success(`${data.return_no} saved`);
-      setPur(null); list.reload();
+      setPur(null); setReload((n) => n + 1);
     } catch (e) { toast.error(e.message); } finally { setBusy(false); }
   };
 
@@ -65,11 +66,40 @@ export default function PurchaseReturn() {
           <div className="mt-4 flex justify-end"><button type="button" className="btn-primary" disabled={busy || value <= 0} onClick={submit}>{busy && <Spinner className="h-4 w-4 text-white" />} Confirm return</button></div>
         </div>
       )}
-      <h3 className="mb-2 font-bold">Recent purchase returns</h3>
+      <ReturnHistory key={reloadKey} />
+    </div>
+  );
+}
+
+function ReturnHistory() {
+  const [from, setFrom] = useState(monthStart());
+  const [to, setTo] = useState(todayStr());
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState('newest');
+  const [page, setPage] = useState(1);
+  const [f, set, reset] = useFilters({ supplier_id: null, refund: '', amount: { min: '', max: '' } }, () => setPage(1));
+  const dq = useDebounced(q);
+  const df = useDebounced(f, 350);
+  const { data } = useApi('/purchases/returns', { from: from || undefined, to: to || undefined, q: dq || undefined, sort, page, ...toParams(df) });
+  return (
+    <>
+      <h3 className="mb-2 font-bold">Purchase return history</h3>
+      <FilterBar
+        search={{ value: q, onChange: (v) => { setQ(v); setPage(1); }, placeholder: 'Return no, purchase no, supplier or reason…' }}
+        date={{ from, to, onChange: (a, b) => { setFrom(a); setTo(b); setPage(1); } }} defaultDate={[monthStart(), todayStr()]}
+        sort={{ value: sort, onChange: setSort, options: [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['amount_desc', 'Value: high → low'], ['amount_asc', 'Value: low → high']] }}
+        values={f} onChange={set} onClear={reset}
+        fields={[
+          { key: 'supplier_id', label: 'Supplier', type: 'party', party: 'supplier' },
+          { key: 'amount', label: 'Return value (৳)', type: 'range' },
+          { key: 'refund', label: 'Settled by', type: 'segment', options: [['cash', 'Cash back'], ['credit', 'Reduced our due']] },
+        ]}
+        summary={data?.summary && <><Sum label="Returns" value={num(data.summary.total)} /><Sum label="Value" value={tk(data.summary.amount)} /><Sum label="Cash back" value={tk(data.summary.refunded)} tone="green" /></>} />
       <div className="table-wrap"><table className="table">
         <thead><tr><th>Return</th><th>Purchase</th><th>Date</th><th>Supplier</th><th className="text-right">Value</th><th className="text-right">Cash back</th><th>Reason</th></tr></thead>
-        <tbody>{list.data?.data.map((r) => <tr key={r.id}><td className="font-semibold">{r.return_no}</td><td>{r.invoice_no}</td><td>{fmtDate(r.return_date)}</td><td>{r.supplier_name}</td><td className="text-right">{tk(r.total_amount)}</td><td className="text-right">{tk(r.refund_amount)}</td><td className="text-slate-500">{r.reason}</td></tr>)}</tbody>
-      </table>{!list.data?.data.length && <Empty title="No purchase returns" />}</div>
-    </div>
+        <tbody>{data?.data.map((r) => <tr key={r.id}><td className="font-semibold">{r.return_no}</td><td>{r.invoice_no}</td><td>{fmtDate(r.return_date)}</td><td>{r.supplier_name}</td><td className="text-right">{tk(r.total_amount)}</td><td className="text-right">{tk(r.refund_amount)}</td><td className="text-slate-500">{r.reason}</td></tr>)}</tbody>
+      </table>{!data?.data.length && <Empty title="No purchase returns match these filters" />}
+      <Pagination page={page} limit={data?.limit} total={data?.total} onPage={setPage} /></div>
+    </>
   );
 }

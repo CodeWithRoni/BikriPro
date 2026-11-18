@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Tags, Search, Save, Wand2, Package, AlertTriangle } from 'lucide-react';
+import { Tags, Save, Wand2, Package, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import useApi from '../hooks/useApi';
 import { PageHeader, Pagination, Empty, Modal, Field, useDebounced, PageLoader } from '../components/ui';
+import FilterBar, { useFilters, toParams, Sum } from '../components/FilterBar';
+import useCatalog from '../hooks/useCatalog';
 import { tk, num, cls } from '../utils/format';
 
 const FILTERS = [
@@ -18,13 +20,14 @@ const FILTERS = [
 export default function PriceManager() {
   const [filter, setFilter] = useState('');
   const [q, setQ] = useState('');
-  const [cat, setCat] = useState('');
-  const [brand, setBrand] = useState('');
+  const [sort, setSort] = useState('name');
   const [page, setPage] = useState(1);
+  const [f, set, reset] = useFilters({ category_id: '', subcategory_id: '', brand_id: '', size: '', color: '', stock: '', retail: { min: '', max: '' }, cost: { min: '', max: '' } }, () => setPage(1));
   const dq = useDebounced(q);
-  const cats = useApi('/categories');
-  const brands = useApi('/brands');
-  const { data, loading, reload } = useApi('/price-manager', { filter: filter || undefined, q: dq || undefined, category_id: cat || undefined, brand_id: brand || undefined, page });
+  const df = useDebounced(f, 350);
+  const c = useCatalog();
+  const facets = useApi('/products/facets');
+  const { data, loading, reload } = useApi('/price-manager', { filter: filter || undefined, q: dq || undefined, sort, page, ...toParams(df) });
   const [edits, setEdits] = useState({});
   const [selected, setSelected] = useState([]);
   const [bulk, setBulk] = useState(null);
@@ -66,12 +69,21 @@ export default function PriceManager() {
           </button>
         ))}
       </div>
-      <div className="card mb-4 flex flex-wrap items-center gap-3 p-3">
-        <div className="relative min-w-[200px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className="input pl-9" placeholder="Name, SKU, barcode…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></div>
-        <select className="input w-44" value={cat} onChange={(e) => { setCat(e.target.value); setPage(1); }}><option value="">All categories</option>{cats.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-        <select className="input w-44" value={brand} onChange={(e) => { setBrand(e.target.value); setPage(1); }}><option value="">All brands</option>{brands.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-      </div>
-
+      <FilterBar
+        search={{ value: q, onChange: (v) => { setQ(v); setPage(1); }, placeholder: 'Product name, SKU or barcode…' }}
+        sort={{ value: sort, onChange: (v) => { setSort(v); setPage(1); }, options: [['name', 'Name A–Z'], ['newest', 'Newest first'], ['retail_desc', 'Retail: high → low'], ['retail_asc', 'Retail: low → high'], ['margin_asc', 'Lowest margin first'], ['margin_desc', 'Highest margin first']] }}
+        values={f} onChange={(patch) => set('category_id' in patch ? { ...patch, subcategory_id: '' } : patch)} onClear={reset}
+        fields={[
+          { key: 'category_id', label: 'Category', type: 'select', options: c.main.map((x) => [x.id, x.name]), placeholder: 'All categories' },
+          { key: 'subcategory_id', label: 'Sub category', type: 'select', options: c.subsOf(f.category_id).map((x) => [x.id, x.name]), placeholder: f.category_id ? 'All sub categories' : 'Pick a category first' },
+          { key: 'brand_id', label: 'Brand', type: 'select', options: c.brands.map((x) => [x.id, x.name]), placeholder: 'All brands' },
+          { key: 'size', label: 'Size', type: 'select', options: (facets.data?.sizes || []).map((x) => [x.name, x.name]), placeholder: 'Any size' },
+          { key: 'color', label: 'Colour', type: 'select', options: (facets.data?.colors || []).map((x) => [x.name, x.name]), placeholder: 'Any colour' },
+          { key: 'retail', label: 'Retail price (৳)', type: 'range' },
+          { key: 'cost', label: 'Cost price (৳)', type: 'range' },
+          { key: 'stock', label: 'Stock', type: 'segment', options: [['in', 'In stock'], ['out', 'Out of stock']] },
+        ]}
+        summary={data && <><Sum label="Variants" value={num(data.total)} />{selected.length > 0 && <Sum label="Selected" value={num(selected.length)} tone="amber" />}{dirty > 0 && <Sum label="Unsaved" value={num(dirty)} tone="rose" />}</>} />
       {loading && !data ? <PageLoader /> : (
         <div className="table-wrap">
           <table className="table">

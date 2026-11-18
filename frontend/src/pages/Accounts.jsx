@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Landmark, Plus, ArrowLeftRight, Banknote, Smartphone, CreditCard, Building2, Pencil, BookOpen } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import useApi from '../hooks/useApi';
-import { PageHeader, Modal, Field, DateRange, StatCard } from '../components/ui';
+import { PageHeader, Modal, Field, DateRange, StatCard, Empty } from '../components/ui';
+import FilterBar, { useFilters, Sum } from '../components/FilterBar';
 import { AccountSelect } from '../components/Pickers';
-import { tk, fmtDate, todayStr, monthStart, cls } from '../utils/format';
+import { tk, num, fmtDate, todayStr, monthStart, cls } from '../utils/format';
 
 const ICON = { cash: Banknote, mfs: Smartphone, card: CreditCard, bank: Building2 };
 const PROVIDERS = { mfs: ['bKash', 'Nagad', 'Rocket', 'Upay', 'Tap', 'OK Wallet'], bank: ['DBBL', 'City Bank', 'BRAC Bank', 'Islami Bank', 'Sonali Bank', 'EBL'] };
@@ -18,6 +19,20 @@ export default function Accounts() {
   const [transfer, setTransfer] = useState(null);
   const [entry, setEntry] = useState(null);
   const [stmt, setStmt] = useState(null);
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState('type');
+  const [f, set, reset] = useFilters({ type: '', status: 'active', bal: '', provider: '' });
+  const providers = [...new Set((data?.data || []).map((a) => a.provider).filter(Boolean))].sort();
+  const list = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    const r = (data?.data || []).filter((a) => (!s || `${a.name} ${a.provider || ''} ${a.account_no || ''} ${a.branch || ''}`.toLowerCase().includes(s))
+      && (!f.type || a.type === f.type) && (!f.provider || a.provider === f.provider)
+      && (!f.status || (f.status === 'active' ? a.is_active : !a.is_active))
+      && (!f.bal || (f.bal === 'pos' ? a.balance > 0 : f.bal === 'zero' ? a.balance === 0 : a.balance < 0)));
+    if (sort === 'type') return r;
+    const by = { balance_desc: (a, b) => b.balance - a.balance, balance_asc: (a, b) => a.balance - b.balance, name: (a, b) => a.name.localeCompare(b.name) }[sort];
+    return [...r].sort(by);
+  }, [data, q, f, sort]);
 
   const save = async () => {
     try {
@@ -45,8 +60,19 @@ export default function Accounts() {
             <StatCard label="All accounts" value={tk(data?.totals.all)} icon={Landmark} />
             {['cash', 'mfs', 'bank', 'card'].map((t) => <StatCard key={t} label={t.toUpperCase()} value={tk(data?.totals[t])} icon={ICON[t]} tone={{ cash: 'green', mfs: 'rose', bank: 'ocean', card: 'violet' }[t]} />)}
           </div>
+          <FilterBar
+            search={{ value: q, onChange: setQ, placeholder: 'Account name, provider, number or branch…' }}
+            sort={{ value: sort, onChange: setSort, options: [['type', 'By type'], ['balance_desc', 'Balance: high → low'], ['balance_asc', 'Balance: low → high'], ['name', 'Name A–Z']] }}
+            values={f} onChange={set} onClear={() => set({ type: '', status: '', bal: '', provider: '' })}
+            fields={[
+              { key: 'provider', label: 'Provider', type: 'select', options: providers.map((p) => [p, p]), placeholder: 'All providers' },
+              { key: 'type', label: 'Type', type: 'segment', options: [['cash', 'Cash'], ['mfs', 'MFS'], ['bank', 'Bank'], ['card', 'Card']] },
+              { key: 'status', label: 'Status', type: 'segment', options: [['active', 'Active'], ['inactive', 'Inactive']] },
+              { key: 'bal', label: 'Balance', type: 'segment', options: [['pos', 'Has money'], ['zero', 'Zero'], ['neg', 'Negative']] },
+            ]}
+            summary={<><Sum label="Accounts" value={num(list.length)} /><Sum label="Balance" value={tk(list.reduce((t, a) => t + a.balance, 0))} tone="green" /></>} />
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {data?.data.map((a) => {
+            {list.map((a) => {
               const Icon = ICON[a.type];
               return (
                 <div key={a.id} className={cls('card p-4', !a.is_active && 'opacity-50')}>
@@ -67,6 +93,7 @@ export default function Accounts() {
               );
             })}
           </div>
+          {data && !list.length && <div className="card"><Empty icon={Landmark} title="No account matches these filters" /></div>}
         </>
       )}
 

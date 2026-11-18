@@ -2,18 +2,23 @@ import { useState } from 'react';
 import { Receipt as ReceiptIcon, Search, Printer, Eye, Download } from 'lucide-react';
 import api from '../api/client';
 import useApi from '../hooks/useApi';
-import { PageHeader, DateRange, Pagination, Modal, Empty, Badge, useDebounced, PageLoader } from '../components/ui';
+import { PageHeader, Pagination, Modal, Empty, Badge, useDebounced, PageLoader } from '../components/ui';
+import FilterBar, { useFilters, toParams, Sum, METHODS } from '../components/FilterBar';
 import { Receipt, printNode } from '../components/receipt/Receipt';
-import { tk, fmtDateTime, fmtDate, monthStart, todayStr, downloadCsv } from '../utils/format';
+import { tk, num, fmtDateTime, fmtDate, monthStart, todayStr, downloadCsv } from '../utils/format';
+
+const INIT = { status: '', pay: '', method: '', account_id: '', customer_id: null, amount: { min: '', max: '' }, walk_in: false };
 
 export default function Sales() {
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayStr());
   const [q, setQ] = useState('');
-  const [dueOnly, setDueOnly] = useState(false);
+  const [sort, setSort] = useState('newest');
   const [page, setPage] = useState(1);
+  const [f, set, reset] = useFilters(INIT, () => setPage(1));
   const dq = useDebounced(q);
-  const { data, loading } = useApi('/sales', { from, to, q: dq, page, due_only: dueOnly ? 1 : undefined });
+  const df = useDebounced(f, 350);
+  const { data, loading } = useApi('/sales', { from: from || undefined, to: to || undefined, q: dq || undefined, page, sort, ...toParams(df) });
   const [view, setView] = useState(null);
   const [printSale, setPrintSale] = useState(null);
 
@@ -24,17 +29,26 @@ export default function Sales() {
     <div>
       <PageHeader icon={ReceiptIcon} title="Sales" subtitle="All invoices"
         actions={<button type="button" className="btn-secondary" onClick={() => downloadCsv(`sales-${from}-${to}.csv`, data?.data)}><Download className="h-4 w-4" /> Export</button>} />
-      <div className="card mb-4 flex flex-wrap items-center gap-3 p-3">
-        <div className="relative min-w-[220px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className="input pl-9" placeholder="Invoice no, customer, phone…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></div>
-        <DateRange from={from} to={to} onChange={(a, b) => { setFrom(a); setTo(b); setPage(1); }} />
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={dueOnly} onChange={(e) => setDueOnly(e.target.checked)} className="accent-ocean-600" /> Due only</label>
-      </div>
-      {data?.summary && (
-        <div className="mb-3 flex flex-wrap gap-4 text-sm">
-          <span>Invoices: <b>{data.summary.total}</b></span><span>Total: <b>{tk(data.summary.amount)}</b></span>
-          <span>Paid: <b className="text-emerald-600">{tk(data.summary.paid)}</b></span><span>Open due: <b className="text-rose-600">{tk(data.summary.due)}</b></span>
-        </div>
-      )}
+      <FilterBar
+        search={{ value: q, onChange: (v) => { setQ(v); setPage(1); }, placeholder: 'Invoice no, customer name or phone…' }}
+        date={{ from, to, onChange: (a, b) => { setFrom(a); setTo(b); setPage(1); } }} defaultDate={[monthStart(), todayStr()]}
+        sort={{ value: sort, onChange: (v) => { setSort(v); setPage(1); }, options: [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['amount_desc', 'Amount: high → low'], ['amount_asc', 'Amount: low → high'], ['due_desc', 'Biggest due first']] }}
+        values={f} onChange={set} onClear={reset}
+        fields={[
+          { key: 'customer_id', label: 'Customer', type: 'party', party: 'customer' },
+          { key: 'method', label: 'Payment method', type: 'select', options: METHODS, placeholder: 'Any method' },
+          { key: 'account_id', label: 'Received in', type: 'account' },
+          { key: 'amount', label: 'Invoice total (৳)', type: 'range' },
+          { key: 'pay', label: 'Payment', type: 'segment', options: [['paid', 'Fully paid'], ['due', 'Has due'], ['overdue', 'Overdue']] },
+          { key: 'status', label: 'Status', type: 'segment', options: [['completed', 'Completed'], ['partial_return', 'Partly returned'], ['returned', 'Returned']] },
+          { key: 'walk_in', label: 'Walk-in only', type: 'toggle' },
+        ]}
+        summary={data?.summary && <>
+          <Sum label="Invoices" value={num(data.summary.total)} />
+          <Sum label="Total" value={tk(data.summary.amount)} />
+          <Sum label="Paid" value={tk(data.summary.paid)} tone="green" />
+          <Sum label="Due" value={tk(data.summary.due)} tone="rose" />
+        </>} />
       {loading && !data ? <PageLoader /> : (
         <div className="table-wrap">
           <table className="table">
@@ -55,7 +69,7 @@ export default function Sales() {
               ))}
             </tbody>
           </table>
-          {!data?.data.length && <Empty title="No invoices in this period" />}
+          {!data?.data.length && <Empty title="No invoices match these filters" hint="Change the date or remove a filter." />}
           <Pagination page={page} limit={data?.limit} total={data?.total} onPage={setPage} />
         </div>
       )}

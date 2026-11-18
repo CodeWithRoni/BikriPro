@@ -1,4 +1,5 @@
 import { query, one, transaction } from '../config/db.js';
+import { addRange, orderBy } from '../utils/filters.js';
 import { asyncHandler, requireFields, badRequest, notFound, paging, money, today } from '../utils/http.js';
 import { logActivity } from '../utils/activity.js';
 import { nextNumber } from '../utils/numbering.js';
@@ -101,15 +102,22 @@ export const list = asyncHandler(async (req, res) => {
   if (req.query.from) { where.push('p.purchase_date >= ?'); params.push(req.query.from); }
   if (req.query.to) { where.push('p.purchase_date <= ?'); params.push(req.query.to); }
   if (req.query.supplier_id) { where.push('p.supplier_id = ?'); params.push(req.query.supplier_id); }
-  if (req.query.due_only === '1') where.push('p.due_amount > 0');
-  if (req.query.q) { where.push('(p.invoice_no ILIKE ? OR p.supplier_ref ILIKE ? OR s.name ILIKE ?)'); const l = `%${req.query.q}%`; params.push(l, l, l); }
+  const qs = req.query;
+  if (qs.due_only === '1') where.push('p.due_amount > 0');
+  if (qs.status) { where.push('p.status = ?'); params.push(qs.status); }
+  if (qs.pay === 'paid') where.push('p.due_amount <= 0');
+  else if (qs.pay === 'partial') where.push('p.due_amount > 0 AND p.paid_amount > 0');
+  else if (qs.pay === 'unpaid') where.push('p.due_amount > 0 AND p.paid_amount <= 0');
+  addRange(where, params, qs, 'amount', 'p.grand_total');
+  if (qs.q) { where.push('(p.invoice_no ILIKE ? OR p.supplier_ref ILIKE ? OR s.name ILIKE ?)'); const l = `%${qs.q}%`; params.push(l, l, l); }
   const base = `FROM purchases p LEFT JOIN suppliers s ON s.id = p.supplier_id WHERE ${where.join(' AND ')}`;
+  const order = orderBy(qs.sort, { oldest: 'p.purchase_date ASC, p.id ASC', amount_desc: 'p.grand_total DESC, p.id DESC', amount_asc: 'p.grand_total ASC, p.id DESC', due_desc: 'p.due_amount DESC, p.id DESC' }, 'p.purchase_date DESC, p.id DESC');
   const [sum] = await query(`SELECT COUNT(*) AS total, COALESCE(SUM(p.grand_total),0) AS amount, COALESCE(SUM(p.paid_amount),0) AS paid, COALESCE(SUM(p.due_amount),0) AS due ${base}`, params);
   const rows = await query(
     `SELECT p.id, p.invoice_no, p.supplier_ref, p.purchase_date, p.grand_total, p.paid_amount, p.due_amount, p.status, s.name AS supplier_name,
       (SELECT COUNT(*) FROM purchase_items pi WHERE pi.purchase_id = p.id) AS item_count,
       (SELECT COALESCE(SUM(pi.qty),0) FROM purchase_items pi WHERE pi.purchase_id = p.id) AS total_qty
-     ${base} ORDER BY p.id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);
+     ${base} ORDER BY ${order} LIMIT ? OFFSET ?`, [...params, limit, offset]);
   res.json({ data: rows, summary: sum, total: sum.total, page, limit });
 });
 
@@ -171,10 +179,21 @@ export const createReturn = asyncHandler(async (req, res) => {
 
 export const listReturns = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query);
-  const rows = await query(
-    `SELECT r.*, p.invoice_no, s.name AS supplier_name FROM purchase_returns r JOIN purchases p ON p.id = r.purchase_id
-     LEFT JOIN suppliers s ON s.id = r.supplier_id ORDER BY r.id DESC LIMIT ? OFFSET ?`, [limit, offset]);
-  res.json({ data: rows, page, limit });
+  const qs = req.query;
+  const where = ['1=1'];
+  const params = [];
+  if (qs.from) { where.push('r.return_date >= ?'); params.push(qs.from); }
+  if (qs.to) { where.push('r.return_date <= ?'); params.push(qs.to); }
+  if (qs.supplier_id) { where.push('r.supplier_id = ?'); params.push(qs.supplier_id); }
+  if (qs.refund === 'cash') where.push('r.refund_amount > 0');
+  else if (qs.refund === 'credit') where.push('r.refund_amount < r.total_amount');
+  addRange(where, params, qs, 'amount', 'r.total_amount');
+  if (qs.q) { where.push('(r.return_no ILIKE ? OR p.invoice_no ILIKE ? OR s.name ILIKE ? OR r.reason ILIKE ?)'); const l = `%${qs.q}%`; params.push(l, l, l, l); }
+  const base = `FROM purchase_returns r JOIN purchases p ON p.id = r.purchase_id LEFT JOIN suppliers s ON s.id = r.supplier_id WHERE ${where.join(' AND ')}`;
+  const [sum] = await query(`SELECT COUNT(*) AS total, COALESCE(SUM(r.total_amount),0) AS amount, COALESCE(SUM(r.refund_amount),0) AS refunded ${base}`, params);
+  const order = orderBy(qs.sort, { oldest: 'r.id ASC', amount_desc: 'r.total_amount DESC, r.id DESC', amount_asc: 'r.total_amount ASC, r.id DESC' }, 'r.id DESC');
+  const rows = await query(`SELECT r.*, p.invoice_no, s.name AS supplier_name ${base} ORDER BY ${order} LIMIT ? OFFSET ?`, [...params, limit, offset]);
+  res.json({ data: rows, summary: sum, total: sum.total, page, limit });
 });
 
 export { loadPurchase as loadPurchase };

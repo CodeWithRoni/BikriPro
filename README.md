@@ -53,6 +53,8 @@ Single-port production run (API also serves the built web app): `npm start` → 
 
 ## Feature map (side menu order)
 
+Every list page has the same advanced filter bar: search, date presets (Today … This year / All time), page-specific filters (party, account, payment method, status, amount range …), sort, active-filter chips with **Clear all**, and live totals for the filtered rows.
+
 1. **Point of Sale** — barcode scan / search, Hold & Held invoices, Recent / Best-selling / Favourite grid, quick customer add, split payments (Cash, bKash, Nagad, Card, Bank), loose-change waiver, loyalty redemption, **credit sale with Next Payment Date** (3 days / 7 days / 1 month / custom), Complete & Print · Complete · Clear, keyboard shortcuts (F2 search, F8 hold, F9 complete, F10 complete & print)
 2. **Dashboard** — **Due Collection Reminders** (appear automatically when a due date arrives), today/month figures, receivable & payable (click to open Collection / Payment), stock value, low stock, best sellers, loyalty, birthdays
 3. **Sales** · 4. **Sales Return** (restock, refund or credit to due, loyalty reversal)
@@ -61,7 +63,7 @@ Single-port production run (API also serves the built web app): `npm start` → 
 9. **Payment** (to suppliers) · 10. **Collection** (from credit customers, with waiver & rescheduling)
 11. **Products** — catalogue, size/colour variants, SKU & barcode, photos (auto 500×500), professional filter bar (category / sub-category / brand / unit / size / colour / stock status / price range / sort, active-filter chips, result count & stock value) · **Product Setup** page: Category, Sub Category, Brand, Unit Type, Size, Color and Variation sets, used as drop-downs and one-tap chips in the product form
 12. **Cash, Bank & MFS** — accounts, statements, transfers, deposits/withdrawals
-13. **Expenses** — shop costs by category, paid from any account
+13. **Expenses** — shop costs by category, paid from any account, category breakdown, add / rename / delete expense categories (expenses are kept as “Other”)
 14. **Profit** — net sales, COGS, gross margin, expenses, net profit, by category
 15. **Report Hub** — 11 reports, CSV export, print
 16. **Activity Log** · 17. **Barcode Labels** (load from the last 10 purchases, choose label fields, A4 sheets or thermal presets / custom mm, live preview) · 18. **Price Manager** (unpriced / missing retail / missing wholesale / below-cost filters, inline edit, bulk markup rules)

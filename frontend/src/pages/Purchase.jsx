@@ -7,7 +7,8 @@ import useApi from '../hooks/useApi';
 import { PartyPicker, ProductPicker, AccountSelect } from '../components/Pickers';
 import ProductForm from '../components/ProductForm';
 import PartyForm from '../components/PartyForm';
-import { PageHeader, Tabs, Field, Empty, DateRange, Pagination, Modal, Spinner, Badge, useDebounced } from '../components/ui';
+import { PageHeader, Tabs, Field, Empty, Pagination, Modal, Spinner, Badge, useDebounced } from '../components/ui';
+import FilterBar, { useFilters, toParams, Sum } from '../components/FilterBar';
 import { tk, num, todayStr, monthStart, fmtDate, variantLabel, cls } from '../utils/format';
 
 export default function Purchase() {
@@ -164,16 +165,32 @@ function PurchaseList() {
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayStr());
   const [q, setQ] = useState('');
+  const [sort, setSort] = useState('newest');
   const [page, setPage] = useState(1);
+  const [f, set, reset] = useFilters({ supplier_id: null, pay: '', status: '', amount: { min: '', max: '' } }, () => setPage(1));
   const dq = useDebounced(q);
-  const { data } = useApi('/purchases', { from, to, q: dq, page });
+  const df = useDebounced(f, 350);
+  const { data } = useApi('/purchases', { from: from || undefined, to: to || undefined, q: dq || undefined, page, sort, ...toParams(df) });
   const [view, setView] = useState(null);
   return (
     <div>
-      <div className="card mb-4 flex flex-wrap items-center gap-3 p-3">
-        <div className="relative min-w-[220px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className="input pl-9" placeholder="Invoice, bill no, supplier…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        <DateRange from={from} to={to} onChange={(a, b) => { setFrom(a); setTo(b); }} />
-      </div>
+      <FilterBar
+        search={{ value: q, onChange: (v) => { setQ(v); setPage(1); }, placeholder: 'Purchase no, supplier bill no or supplier…' }}
+        date={{ from, to, onChange: (a, b) => { setFrom(a); setTo(b); setPage(1); } }} defaultDate={[monthStart(), todayStr()]}
+        sort={{ value: sort, onChange: (v) => { setSort(v); setPage(1); }, options: [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['amount_desc', 'Amount: high → low'], ['amount_asc', 'Amount: low → high'], ['due_desc', 'Biggest due first']] }}
+        values={f} onChange={set} onClear={reset}
+        fields={[
+          { key: 'supplier_id', label: 'Supplier', type: 'party', party: 'supplier' },
+          { key: 'amount', label: 'Purchase total (৳)', type: 'range' },
+          { key: 'status', label: 'Status', type: 'select', options: [['received', 'Received'], ['partial_return', 'Partly returned'], ['returned', 'Returned']], placeholder: 'Any status' },
+          { key: 'pay', label: 'Payment', type: 'segment', options: [['paid', 'Fully paid'], ['partial', 'Partly paid'], ['unpaid', 'Unpaid']] },
+        ]}
+        summary={data?.summary && <>
+          <Sum label="Purchases" value={num(data.summary.total)} />
+          <Sum label="Total" value={tk(data.summary.amount)} />
+          <Sum label="Paid" value={tk(data.summary.paid)} tone="green" />
+          <Sum label="Due" value={tk(data.summary.due)} tone="rose" />
+        </>} />
       <div className="table-wrap">
         <table className="table">
           <thead><tr><th>Invoice</th><th>Date</th><th>Supplier</th><th className="text-right">Qty</th><th className="text-right">Total</th><th className="text-right">Paid</th><th className="text-right">Due</th><th>Status</th><th /></tr></thead>
@@ -187,7 +204,7 @@ function PurchaseList() {
             </tr>
           ))}</tbody>
         </table>
-        {!data?.data.length && <Empty title="No purchases in this period" />}
+        {!data?.data.length && <Empty title="No purchases match these filters" />}
         <Pagination page={page} limit={data?.limit} total={data?.total} onPage={setPage} />
       </div>
       <Modal open={!!view} onClose={() => setView(null)} title={`Purchase ${view?.invoice_no || ''}`} size="lg">
