@@ -7,6 +7,7 @@ import useCatalog from '../hooks/useCatalog';
 import { Modal, Spinner } from './ui';
 import { processProductImage, blobName } from '../utils/image';
 import { cls } from '../utils/format';
+import Select from './ui/Select';
 
 const newVariant = () => ({ size: '', color: '', sku: '', barcode: '', purchase_price: '', retail_price: '', wholesale_price: '', opening_stock: '', low_stock_alert: 3 });
 const blankProduct = () => ({ name: '', main_id: '', sub_id: '', brand_id: '', description: '', unit: 'pcs', is_favorite: false });
@@ -178,10 +179,10 @@ export default function ProductForm({ open, onClose, onSaved, editId = null }) {
             <PickWithAdd label="Brand" value={f.brand_id} onChange={(v) => setF({ ...f, brand_id: v })} options={c.brands} onAdd={() => quickCreate('brand')} />
             <div>
               <span className="label">Unit</span>
-              <select className="input" value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })}>
+              <Select className="input" value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })}>
                 {units.map((u) => <option key={u.id} value={u.value || u.name}>{u.name}{u.value && u.value !== u.name ? ` (${u.value})` : ''}</option>)}
                 {!units.length && <option value="pcs">Piece (pcs)</option>}
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -192,10 +193,10 @@ export default function ProductForm({ open, onClose, onSaved, editId = null }) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-xs font-semibold text-ocean-700 dark:text-ocean-300"><Wand2 className="h-3.5 w-3.5" /> Generate variants (size × colour)</p>
               {c.variations.length > 0 && (
-                <select className="input-sm w-auto py-1 text-xs" value={gen.set} onChange={(e) => pickSet(e.target.value)} aria-label="Variation set">
+                <Select className="input-sm w-auto py-1 text-xs" value={gen.set} onChange={(e) => pickSet(e.target.value)} aria-label="Variation set">
                   <option value="">Use a variation set…</option>
                   {c.variations.map((v) => <option key={v.id} value={v.id}>{v.name} ({v.value})</option>)}
-                </select>
+                </Select>
               )}
             </div>
             {c.sizes.length > 0 && (
@@ -279,10 +280,10 @@ function PickWithAdd({ label, value, onChange, options, onAdd, disabled, placeho
     <div className="min-w-0">
       <span className="label">{label}</span>
       <div className="flex gap-1.5">
-        <select className="input min-w-0" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+        <Select className="input min-w-0" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
           <option value="">{placeholder}</option>
           {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
+        </Select>
         <button type="button" className="btn-secondary shrink-0 px-2.5" onClick={onAdd} disabled={disabled} aria-label={`New ${label.toLowerCase()}`}><Plus className="h-4 w-4" /></button>
       </div>
     </div>

@@ -4,6 +4,7 @@ import useApi from '../hooks/useApi';
 import { PageHeader, StatCard, Empty, PageLoader } from '../components/ui';
 import FilterBar, { useFilters, Sum } from '../components/FilterBar';
 import { tk, num, fmtDate, monthStart, todayStr, cls, downloadCsv } from '../utils/format';
+import Select from '../components/ui/Select';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** Monday of the week for a YYYY-MM-DD date */
@@ -89,9 +90,9 @@ export default function Profit() {
             <div className="card p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <p className="font-bold">Profit by category</p>
-                <select className="input-sm w-auto py-1 text-xs" value={catSort} onChange={(e) => setCatSort(e.target.value)} aria-label="Sort categories">
+                <Select className="input-sm w-auto py-1 text-xs" value={catSort} onChange={(e) => setCatSort(e.target.value)} aria-label="Sort categories">
                   <option value="profit">Most profit</option><option value="sales">Most sales</option><option value="margin">Best margin</option>
-                </select>
+                </Select>
               </div>
               {cats.length === 0 ? <p className="text-sm text-slate-500">{data.by_category.length ? 'No category matches.' : 'No sales.'}</p> : (
                 <ul className="space-y-2.5 text-sm">{cats.map((c) => (

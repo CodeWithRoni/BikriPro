@@ -7,6 +7,7 @@ import { PageHeader, Empty, Field, Spinner, Pagination, useDebounced } from '../
 import FilterBar, { useFilters, toParams, Sum } from '../components/FilterBar';
 import { AccountSelect } from '../components/Pickers';
 import { tk, fmtDate, num, todayStr, monthStart } from '../utils/format';
+import Select from '../components/ui/Select';
 
 export default function PurchaseReturn() {
   const recent = useApi('/purchases', { limit: 50 });
@@ -39,10 +40,10 @@ export default function PurchaseReturn() {
       <PageHeader icon={PackageMinus} title="Purchase Return" subtitle="Send goods back to a supplier — stock goes down, payable reduces or cash comes back" />
       <div className="card mb-4 p-3">
         <Field label="Select purchase invoice">
-          <select className="input" value={pur?.id || ''} onChange={(e) => load(e.target.value)}>
+          <Select className="input" value={pur?.id || ''} onChange={(e) => load(e.target.value)}>
             <option value="">— choose —</option>
             {recent.data?.data.map((p) => <option key={p.id} value={p.id}>{p.invoice_no} · {p.supplier_name} · {fmtDate(p.purchase_date)} · {tk(p.grand_total)}</option>)}
-          </select>
+          </Select>
         </Field>
       </div>
       {pur && (

@@ -3,6 +3,7 @@ import { History, Search } from 'lucide-react';
 import useApi from '../hooks/useApi';
 import { PageHeader, DateRange, Pagination, Empty, Badge, useDebounced, PageLoader } from '../components/ui';
 import { fmtDateTime, addDays, todayStr } from '../utils/format';
+import Select from '../components/ui/Select';
 
 const TONE = { create: 'green', update: 'ocean', delete: 'rose', login: 'slate', reset: 'rose', import: 'amber', export: 'ocean' };
 
@@ -25,7 +26,7 @@ export default function ActivityLog() {
       <PageHeader icon={History} title="Activity Log" subtitle="Who did what, and when" />
       <div className="card mb-4 flex flex-wrap items-center gap-3 p-3">
         <div className="relative min-w-[200px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className="input pl-9" placeholder="Search details…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        <select className="input w-44" value={module} onChange={(e) => { setModule(e.target.value); setPage(1); }}><option value="">All modules</option>{data?.modules.map((m) => <option key={m} value={m}>{m}</option>)}</select>
+        <Select className="input w-44" value={module} onChange={(e) => { setModule(e.target.value); setPage(1); }}><option value="">All modules</option>{data?.modules.map((m) => <option key={m} value={m}>{m}</option>)}</Select>
         <DateRange from={from} to={to} onChange={(a, b) => { setFrom(a); setTo(b); setPage(1); }} />
       </div>
       {loading && !data ? <PageLoader /> : (

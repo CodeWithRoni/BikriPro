@@ -8,6 +8,7 @@ import { PageHeader, Pagination, Empty, Modal, Field, useDebounced, PageLoader }
 import FilterBar, { useFilters, toParams, Sum } from '../components/FilterBar';
 import useCatalog from '../hooks/useCatalog';
 import { tk, num, cls } from '../utils/format';
+import Select from '../components/ui/Select';
 
 const FILTERS = [
   ['', 'All products', null],
@@ -120,12 +121,12 @@ export default function PriceManager() {
         footer={<><button type="button" className="btn-secondary" onClick={() => setBulk(null)}>Cancel</button><button type="button" className="btn-primary" disabled={bulk?.value === ''} onClick={applyBulk}>Apply</button></>}>
         {bulk && (
           <div className="space-y-3">
-            <Field label="Price to change"><select className="input" value={bulk.field} onChange={(e) => setBulk({ ...bulk, field: e.target.value })}><option value="retail_price">Retail (MRP)</option><option value="wholesale_price">Wholesale</option></select></Field>
-            <Field label="Rule"><select className="input" value={bulk.mode} onChange={(e) => setBulk({ ...bulk, mode: e.target.value })}>
+            <Field label="Price to change"><Select className="input" value={bulk.field} onChange={(e) => setBulk({ ...bulk, field: e.target.value })}><option value="retail_price">Retail (MRP)</option><option value="wholesale_price">Wholesale</option></Select></Field>
+            <Field label="Rule"><Select className="input" value={bulk.mode} onChange={(e) => setBulk({ ...bulk, mode: e.target.value })}>
               <option value="markup_percent">Cost + markup %</option><option value="increase_percent">Increase current by %</option><option value="increase_amount">Increase current by Tk</option><option value="set">Set exact price</option>
-            </select></Field>
+            </Select></Field>
             <Field label={bulk.mode.includes('percent') ? 'Percent' : 'Amount (Tk)'} hint="Use a negative number to decrease"><input type="number" className="input" value={bulk.value} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} /></Field>
-            <Field label="Round to nearest" hint="e.g. 10 → 1,147 becomes 1,150"><select className="input" value={bulk.round_to} onChange={(e) => setBulk({ ...bulk, round_to: e.target.value })}><option value="">No rounding</option><option value="5">5</option><option value="10">10</option><option value="50">50</option><option value="100">100</option></select></Field>
+            <Field label="Round to nearest" hint="e.g. 10 → 1,147 becomes 1,150"><Select className="input" value={bulk.round_to} onChange={(e) => setBulk({ ...bulk, round_to: e.target.value })}><option value="">No rounding</option><option value="5">5</option><option value="10">10</option><option value="50">50</option><option value="100">100</option></Select></Field>
             {bulk.mode === 'markup_percent' && bulk.value !== '' && <p className="text-xs text-slate-500">Example: cost {tk(500)} → {tk(500 * (1 + Number(bulk.value) / 100))}</p>}
           </div>
         )}

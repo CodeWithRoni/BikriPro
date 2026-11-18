@@ -3,6 +3,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Modal, Field, Spinner } from './ui';
+import Select from './ui/Select';
 
 const blank = (type) => ({
   name: '', phone: '', address: '', area: '', opening_balance: 0, notes: '',
@@ -84,9 +85,9 @@ export default function PartyForm({ type = 'customer', open, onClose, onSaved, e
                 {f.contacts.map((c, i) => (
                   // eslint-disable-next-line react/no-array-index-key
                   <div key={i} className="flex gap-2">
-                    <select className="input w-28 shrink-0" value={c.type} onChange={(e) => setContact(i, 'type', e.target.value)}>
+                    <Select className="input w-28 shrink-0" value={c.type} onChange={(e) => setContact(i, 'type', e.target.value)}>
                       <option value="phone">Phone</option><option value="email">Email</option><option value="address">Address</option><option value="other">Other</option>
-                    </select>
+                    </Select>
                     <input className="input w-28 shrink-0" placeholder="Label" value={c.label || ''} onChange={(e) => setContact(i, 'label', e.target.value)} />
                     <input className="input" placeholder="Value" value={c.value} onChange={(e) => setContact(i, 'value', e.target.value)} />
                     <button type="button" className="btn-ghost px-2.5 text-rose-500" onClick={() => removeContact(i)} aria-label="Remove"><Trash2 className="h-4 w-4" /></button>

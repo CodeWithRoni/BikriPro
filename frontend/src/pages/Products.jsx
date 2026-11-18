@@ -10,6 +10,7 @@ import useCatalog from '../hooks/useCatalog';
 import ProductForm from '../components/ProductForm';
 import { PageHeader, Pagination, Empty, useDebounced, PageLoader } from '../components/ui';
 import { tk, num, cls } from '../utils/format';
+import Select from '../components/ui/Select';
 
 const EMPTY = { category_id: '', subcategory_id: '', brand_id: '', unit: '', stock: '', sizes: [], colors: [], min_price: '', max_price: '', favorite: false, price: '' };
 const STOCK = [['', 'All'], ['in', 'In stock'], ['low', 'Low stock'], ['out', 'Out of stock']];
@@ -91,10 +92,10 @@ export default function Products() {
             {q && <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:text-rose-500" onClick={() => setQ('')} aria-label="Clear search"><X className="h-4 w-4" /></button>}
           </div>
           <div className="relative">
-            <ArrowUpDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <select className="input w-auto pl-9 pr-8" value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }} aria-label="Sort">
+            <ArrowUpDown className="pointer-events-none absolute z-10 left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Select className="input w-auto pl-9 pr-8" value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }} aria-label="Sort">
               {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            </Select>
           </div>
           <button type="button" className={cls('btn-secondary lg:hidden', panelOpen && 'border-ocean-400 text-ocean-700 dark:text-ocean-300')} onClick={() => setPanelOpen(!panelOpen)}>
             <SlidersHorizontal className="h-4 w-4" /> Filters {active.length > 0 && <span className="rounded-full bg-ocean-600 px-1.5 text-[11px] text-white">{active.length}</span>}
@@ -212,10 +213,10 @@ function FilterSelect({ label, value, onChange, options, placeholder, disabled }
   return (
     <div>
       <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <select className={cls('input-sm', value && 'border-ocean-400 text-ocean-700 dark:text-ocean-300')} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+      <Select className={cls('input-sm', value && 'border-ocean-400 text-ocean-700 dark:text-ocean-300')} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         <option value="">{placeholder}</option>
         {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-      </select>
+      </Select>
     </div>
   );
 }

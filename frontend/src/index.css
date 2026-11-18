@@ -44,3 +44,7 @@
   .print-area { position: absolute; left: 0; top: 0; width: 100%; background: #fff; color: #000; }
   .no-print { display: none !important; }
 }
+
+/* BikriPro drop-down open animation */
+@keyframes bpPop { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes bpPopUp { from { opacity: 0; transform: translateY(4px) scale(.98); } to { opacity: 1; transform: none; } }

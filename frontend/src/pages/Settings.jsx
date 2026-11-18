@@ -8,6 +8,7 @@ import { settingsLoaded } from '../store';
 import { PageHeader, Tabs, Field, Modal, Badge, Spinner } from '../components/ui';
 import { fmtDateTime, tk, cls } from '../utils/format';
 import { processLogo, blobName } from '../utils/image';
+import Select from '../components/ui/Select';
 
 const TABS = [['shop', 'Shop info'], ['loyalty', 'Loyalty'], ['sms', 'SMS'], ['users', 'Users'], ['security', 'Security PIN'], ['data', 'Backup & Reset']];
 
@@ -89,7 +90,7 @@ function ShopInfo({ s, bind, toggle, save, onLogo }) {
       <Field label="Email"><input className="input" {...bind('shop_email')} /></Field>
       <Field label="VAT BIN"><input className="input" {...bind('shop_bin')} /></Field>
       <Field label="VAT %" hint="0 to disable"><input type="number" className="input" {...bind('vat_percent')} /></Field>
-      <Field label="Receipt paper width"><select className="input" {...bind('receipt_width_mm')}><option value="80">80 mm</option><option value="58">58 mm</option></select></Field>
+      <Field label="Receipt paper width"><Select className="input" {...bind('receipt_width_mm')}><option value="80">80 mm</option><option value="58">58 mm</option></Select></Field>
       <Field label="Receipt footer" className="sm:col-span-2"><input className="input" {...bind('invoice_footer')} /></Field>
       <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" className="accent-ocean-600" {...toggle('allow_negative_stock')} /> Allow selling when stock is 0 (negative stock)</label>
     </Section>
@@ -140,7 +141,7 @@ function UsersTab() {
           <Field label="Full name"><input className="input" value={u.name} onChange={(e) => setU({ ...u, name: e.target.value })} /></Field>
           {!u.id && <Field label="Username"><input className="input" value={u.username} onChange={(e) => setU({ ...u, username: e.target.value })} /></Field>}
           <Field label="Phone"><input className="input" value={u.phone || ''} onChange={(e) => setU({ ...u, phone: e.target.value })} /></Field>
-          <Field label="Role"><select className="input" value={u.role} onChange={(e) => setU({ ...u, role: e.target.value })}><option value="cashier">Cashier</option><option value="manager">Manager</option><option value="admin">Admin</option></select></Field>
+          <Field label="Role"><Select className="input" value={u.role} onChange={(e) => setU({ ...u, role: e.target.value })}><option value="cashier">Cashier</option><option value="manager">Manager</option><option value="admin">Admin</option></Select></Field>
           <Field label={u.id ? 'New password (leave blank to keep)' : 'Password'}><input type="password" className="input" value={u.password} onChange={(e) => setU({ ...u, password: e.target.value })} /></Field>
           {u.id && <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-ocean-600" checked={!!u.is_active} onChange={(e) => setU({ ...u, is_active: e.target.checked ? 1 : 0 })} /> Active</label>}
         </div>}

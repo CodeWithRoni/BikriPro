@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Search, X, SlidersHorizontal, RotateCcw, ArrowUpDown, CalendarDays } from 'lucide-react';
 import useApi from '../hooks/useApi';
-import { PartyPicker } from './Pickers';
+import { PartyPicker, ACCOUNT_ICONS } from './Pickers';
 import { cls, todayStr, addDays, monthStart, fmtDate, tk } from '../utils/format';
+import Select from './ui/Select';
 
 /** Payment methods (account types) */
 export const METHODS = [['cash', 'Cash'], ['mfs', 'bKash / Nagad (MFS)'], ['card', 'Card'], ['bank', 'Bank']];
@@ -96,10 +97,10 @@ export default function FilterBar({ search, date, sort, fields = [], values = {}
         )}
         {sort && (
           <div className="relative">
-            <ArrowUpDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <select className="input w-auto pl-9 pr-8" value={sort.value} onChange={(e) => sort.onChange(e.target.value)} aria-label="Sort">
+            <ArrowUpDown className="pointer-events-none absolute z-10 left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Select className="input w-auto pl-9 pr-8" value={sort.value} onChange={(e) => sort.onChange(e.target.value)} aria-label="Sort">
               {sort.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            </Select>
           </div>
         )}
         {(fields.length > 0 || date) && (
@@ -133,16 +134,16 @@ export default function FilterBar({ search, date, sort, fields = [], values = {}
                 <div key={x.key} className="min-w-0">
                   <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{x.label}</p>
                   {x.type === 'select' && (
-                    <select className={cls('input-sm', !isEmpty(values[x.key]) && 'border-ocean-400 text-ocean-700 dark:text-ocean-300')} value={values[x.key] ?? ''} onChange={(e) => onChange({ [x.key]: e.target.value })}>
+                    <Select className={cls('input-sm', !isEmpty(values[x.key]) && 'border-ocean-400 text-ocean-700 dark:text-ocean-300')} value={values[x.key] ?? ''} onChange={(e) => onChange({ [x.key]: e.target.value })}>
                       <option value="">{x.placeholder || 'All'}</option>
                       {x.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
+                    </Select>
                   )}
                   {x.type === 'account' && (
-                    <select className={cls('input-sm', !isEmpty(values[x.key]) && 'border-ocean-400 text-ocean-700 dark:text-ocean-300')} value={values[x.key] ?? ''} onChange={(e) => onChange({ [x.key]: e.target.value })}>
+                    <Select className={cls('input-sm', !isEmpty(values[x.key]) && 'border-ocean-400 text-ocean-700 dark:text-ocean-300')} value={values[x.key] ?? ''} onChange={(e) => onChange({ [x.key]: e.target.value })}>
                       <option value="">{x.placeholder || 'All accounts'}</option>
-                      {accList.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.type.toUpperCase()})</option>)}
-                    </select>
+                      {accList.map((a) => <option key={a.id} value={a.id} data-icon={ACCOUNT_ICONS[a.type]}>{a.name} ({a.type.toUpperCase()})</option>)}
+                    </Select>
                   )}
                   {x.type === 'party' && <div className="[&_.input]:rounded-lg [&_.input]:py-1.5"><PartyPicker type={x.party} value={values[x.key]} onChange={(v) => onChange({ [x.key]: v })} placeholder={x.placeholder || `Any ${x.party}`} /></div>}
                   {x.type === 'text' && <input className="input-sm" placeholder={x.placeholder} value={values[x.key] ?? ''} onChange={(e) => onChange({ [x.key]: e.target.value })} />}

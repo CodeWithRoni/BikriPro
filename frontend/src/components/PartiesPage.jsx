@@ -8,6 +8,7 @@ import { PageHeader, Pagination, Empty, Modal, Field, DateRange, useDebounced, P
 import FilterBar, { useFilters, toParams, Sum } from './FilterBar';
 import { tk, num, fmtDate, todayStr, downloadCsv, cls } from '../utils/format';
 import { printNode } from './receipt/Receipt';
+import Select from './ui/Select';
 
 const TXN_TYPES = {
   customer: [['sale', 'Sales'], ['sale_return', 'Returns'], ['collection', 'Collections'], ['adjustment', 'Adjustments']],
@@ -155,7 +156,7 @@ function Ledger({ type, party, onClose }) {
                 ? (adj.effect === 'deduction' ? 'Reduces what the customer owes — e.g. waive 20/50/100 Tk loose change.' : 'Increases what the customer owes.')
                 : (adj.effect === 'deduction' ? 'Reduces what you owe — e.g. rebate or commission from the supplier.' : 'Increases what you owe the supplier.')}
             </p>
-            <Field label="Reason"><select className="input" value={adj.reason} onChange={(e) => setAdj({ ...adj, reason: e.target.value })}>{REASONS[type].map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
+            <Field label="Reason"><Select className="input" value={adj.reason} onChange={(e) => setAdj({ ...adj, reason: e.target.value })}>{REASONS[type].map(([k, l]) => <option key={k} value={k}>{l}</option>)}</Select></Field>
             <Field label="Amount"><input type="number" className="input" autoFocus value={adj.amount} onChange={(e) => setAdj({ ...adj, amount: e.target.value })} /></Field>
             {type === 'customer' && adj.reason === 'round_off' && (
               <div className="flex gap-1.5">{[20, 50, 100].map((v) => <button type="button" key={v} className="chip" onClick={() => setAdj({ ...adj, amount: String(v) })}>{v} Tk</button>)}</div>

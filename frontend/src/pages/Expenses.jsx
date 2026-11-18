@@ -7,6 +7,7 @@ import { PageHeader, Field, Empty, Modal, Pagination, Spinner, useDebounced } fr
 import { AccountSelect } from '../components/Pickers';
 import FilterBar, { useFilters, toParams, Sum, METHODS } from '../components/FilterBar';
 import { tk, num, fmtDate, todayStr, monthStart, cls, downloadCsv } from '../utils/format';
+import Select from '../components/ui/Select';
 
 const BAR = ['bg-ocean-500', 'bg-violet-500', 'bg-amber-500', 'bg-emerald-500', 'bg-rose-500', 'bg-sky-500', 'bg-slate-400'];
 
@@ -105,9 +106,9 @@ export default function Expenses() {
           <p className="font-bold">Add expense</p>
           <Field label="Category">
             <div className="flex gap-1.5">
-              <select className="input min-w-0" value={f.category_id} onChange={(e) => setF({ ...f, category_id: e.target.value })}>
+              <Select className="input min-w-0" value={f.category_id} onChange={(e) => setF({ ...f, category_id: e.target.value })}>
                 <option value="">Other</option>{cats.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              </Select>
               <button type="button" className="btn-secondary shrink-0 px-2.5" onClick={() => setManage(true)} aria-label="Manage expense categories"><FolderCog className="h-4 w-4" /></button>
             </div>
           </Field>

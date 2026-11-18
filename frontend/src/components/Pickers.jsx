@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, Package } from 'lucide-react';
+import { Search, Package, Banknote, Smartphone, Building2, CreditCard } from 'lucide-react';
 import api, { fileUrl } from '../api/client';
 import { useDebounced } from './ui';
 import { tk, variantLabel, cls } from '../utils/format';
 import useApi from '../hooks/useApi';
+import Select from './ui/Select';
+
+/** Icon per account type, used in account drop-downs */
+export const ACCOUNT_ICONS = { cash: Banknote, mfs: Smartphone, bank: Building2, card: CreditCard };
 
 /** Search-as-you-type picker for customers / suppliers. */
 export function PartyPicker({ type = 'customer', value, onChange, placeholder, allowClear = true }) {
@@ -128,8 +132,8 @@ export function AccountSelect({ value, onChange, className = '', filter }) {
     if (!value && list.length) onChange(list.find((a) => a.type === 'cash')?.id || list[0].id);
   }, [list.length]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <select className={cls('input', className)} value={value || ''} onChange={(e) => onChange(Number(e.target.value))}>
-      {list.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.type.toUpperCase()}) — {tk(a.balance)}</option>)}
-    </select>
+    <Select className={cls('input', className)} value={value || ''} onChange={(e) => onChange(Number(e.target.value))}>
+      {list.map((a) => <option key={a.id} value={a.id} data-icon={ACCOUNT_ICONS[a.type]} data-hint={tk(a.balance)}>{a.name} ({a.type.toUpperCase()})</option>)}
+    </Select>
   );
 }

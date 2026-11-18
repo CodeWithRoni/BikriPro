@@ -9,6 +9,7 @@ import { ProductPicker } from '../components/Pickers';
 import { PageHeader, Field, Empty } from '../components/ui';
 import { printNode } from '../components/receipt/Receipt';
 import { fmtDate, num, variantLabel, cls } from '../utils/format';
+import Select from '../components/ui/Select';
 
 const A4_LAYOUTS = [
   { id: '3x8', cols: 3, rows: 8, label: '3 × 8 (24 per sheet, 70×37mm)' },
@@ -116,10 +117,10 @@ export default function BarcodeLabels() {
         <div className="space-y-4">
           <div className="card space-y-3 p-4">
             <Field label="Load from recent purchase (last 10)">
-              <select className="input" value={purchaseId} onChange={(e) => loadPurchase(e.target.value)}>
+              <Select className="input" value={purchaseId} onChange={(e) => loadPurchase(e.target.value)}>
                 <option value="">— select purchase invoice —</option>
                 {recent.data?.map((p) => <option key={p.id} value={p.id}>{p.invoice_no} · {p.supplier_name || '—'} · {fmtDate(p.purchase_date)} · {num(p.total_qty)} pcs</option>)}
-              </select>
+              </Select>
             </Field>
             <Field label="…or add products"><ProductPicker onPick={addProduct} placeholder="Search / scan product" /></Field>
           </div>
@@ -146,7 +147,7 @@ export default function BarcodeLabels() {
                 <label key={k} className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-ocean-600" checked={show[k]} onChange={(e) => setShow({ ...show, [k]: e.target.checked })} />{l}</label>
               ))}
             </div>
-            {show.price && <Field label="Price shown"><select className="input" value={priceField} onChange={(e) => setPriceField(e.target.value)}><option value="retail_price">Retail / MRP</option><option value="wholesale_price">Wholesale</option></select></Field>}
+            {show.price && <Field label="Price shown"><Select className="input" value={priceField} onChange={(e) => setPriceField(e.target.value)}><option value="retail_price">Retail / MRP</option><option value="wholesale_price">Wholesale</option></Select></Field>}
           </div>
 
           <div className="card space-y-3 p-4">
@@ -157,7 +158,7 @@ export default function BarcodeLabels() {
               ))}
             </div>
             {mode === 'a4' ? (
-              <Field label="Sheet layout"><select className="input" value={a4} onChange={(e) => setA4(e.target.value)}>{A4_LAYOUTS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}</select></Field>
+              <Field label="Sheet layout"><Select className="input" value={a4} onChange={(e) => setA4(e.target.value)}>{A4_LAYOUTS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}</Select></Field>
             ) : (
               <>
                 <div className="flex flex-wrap gap-1.5">{THERMAL_PRESETS.map((p) => <button type="button" key={p.label} className={cls('chip', Number(size.w) === p.w && Number(size.h) === p.h && 'chip-active')} onClick={() => setSize({ w: p.w, h: p.h })}>{p.label}</button>)}</div>

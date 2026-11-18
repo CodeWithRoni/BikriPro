@@ -9,6 +9,7 @@ import api from '../api/client';
 import useCatalog from '../hooks/useCatalog';
 import { PageHeader, Spinner } from '../components/ui';
 import { cls } from '../utils/format';
+import Select from '../components/ui/Select';
 
 const TONES = {
   ocean: 'bg-ocean-50 text-ocean-600 dark:bg-ocean-900/30 dark:text-ocean-300',
@@ -136,10 +137,10 @@ function SetupCard({ title, icon: Icon, tone, placeholder, extra, items, save, r
 
   const extraInput = extra && (
     extra.type === 'select' ? (
-      <select className={cls('input-sm', extra.block ? 'w-full' : 'w-full')} value={form[extra.key] || ''} onChange={(e) => setForm({ ...form, [extra.key]: e.target.value })}>
+      <Select className={cls('input-sm', extra.block ? 'w-full' : 'w-full')} value={form[extra.key] || ''} onChange={(e) => setForm({ ...form, [extra.key]: e.target.value })}>
         <option value="">{extra.placeholder}…</option>
         {extra.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+      </Select>
     ) : extra.type === 'color' ? (
       <label className="relative h-[34px] w-11 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700" title="Pick colour">
         <span className="absolute inset-0" style={{ background: form[extra.key] || extra.default }} />
