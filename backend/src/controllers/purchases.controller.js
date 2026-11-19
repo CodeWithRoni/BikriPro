@@ -1,5 +1,5 @@
 import { query, one, transaction } from '../config/db.js';
-import { addRange, orderBy } from '../utils/filters.js';
+import { addRange, orderBy, scopeFilter } from '../utils/filters.js';
 import { asyncHandler, requireFields, badRequest, notFound, paging, money, today } from '../utils/http.js';
 import { logActivity } from '../utils/activity.js';
 import { nextNumber } from '../utils/numbering.js';
@@ -107,6 +107,7 @@ export const list = asyncHandler(async (req, res) => {
   if (req.query.to) { where.push('p.purchase_date <= ?'); params.push(req.query.to); }
   if (req.query.supplier_id) { where.push('p.supplier_id = ?'); params.push(req.query.supplier_id); }
   const qs = req.query;
+  scopeFilter(where, params, 'p.branch_id');
   if (qs.due_only === '1') where.push('p.due_amount > 0');
   if (qs.status) { where.push('p.status = ?'); params.push(qs.status); }
   if (qs.pay === 'paid') where.push('p.due_amount <= 0');
@@ -186,6 +187,7 @@ export const listReturns = asyncHandler(async (req, res) => {
   const qs = req.query;
   const where = ['1=1'];
   const params = [];
+  scopeFilter(where, params, 'r.branch_id');
   if (qs.from) { where.push('r.return_date >= ?'); params.push(qs.from); }
   if (qs.to) { where.push('r.return_date <= ?'); params.push(qs.to); }
   if (qs.supplier_id) { where.push('r.supplier_id = ?'); params.push(qs.supplier_id); }

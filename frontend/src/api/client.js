@@ -31,6 +31,8 @@ const api = axios.create({ baseURL: `${getServerUrl()}/api`, timeout: 30000 });
 api.interceptors.request.use((cfg) => {
   const token = localStorage.getItem('bp_token');
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
+  const branch = localStorage.getItem('bp_branch'); // admin's branch switcher: an id or "all"
+  if (branch && !cfg.headers['X-Branch-Id']) cfg.headers['X-Branch-Id'] = branch;
   return cfg;
 });
 
@@ -46,5 +48,12 @@ api.interceptors.response.use(
     return Promise.reject(Object.assign(err, { message }));
   }
 );
+
+/** Branch the admin is looking at: an id, "all", or null (own / main branch). */
+export const getBranch = () => localStorage.getItem('bp_branch');
+export function setBranch(b) {
+  if (b) localStorage.setItem('bp_branch', String(b));
+  else localStorage.removeItem('bp_branch');
+}
 
 export default api;

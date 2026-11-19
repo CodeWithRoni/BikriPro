@@ -29,6 +29,12 @@ const DEFAULTS = {
   sms_receipt_template: 'Dear {name}, thanks for shopping at {shop}. Invoice {invoice}, Total {total} Tk. View receipt: {link}',
   public_app_url: 'https://codewithroni.github.io/BikriPro/app/', // where shared receipt links open
   shift_required: '0',               // 1 = cashier must open a shift before selling
+  // Owner alerts
+  owner_phone: '',                   // daily summary & big-sale SMS go here
+  owner_daily_sms: '0',              // 1 = SMS yesterday's summary every morning
+  big_sale_amount: '0',              // bills at or above this are highlighted (0 = off)
+  big_sale_sms: '0',                 // 1 = SMS the owner on a big sale
+  online_default_delivery: '60',     // delivery charge suggested on a new online order
 };
 
 // Keys never sent to the client

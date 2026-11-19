@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { query, one, transaction } from '../config/db.js';
-import { addRange, orderBy } from '../utils/filters.js';
+import { addRange, orderBy, scopeFilter } from '../utils/filters.js';
 import { asyncHandler, requireFields, badRequest, notFound, paging, money, today } from '../utils/http.js';
 import { logActivity } from '../utils/activity.js';
 import { nextNumber } from '../utils/numbering.js';
@@ -80,7 +80,9 @@ async function createSaleTx(conn, req, b, { exchange = null } = {}) {
       pointsValue = loyalty.valueOf(pointsRedeemed, cfg);
     }
 
-    const grandTotal = money(taxable + vat - roundOff - pointsValue);
+    const delivery = money(b.delivery_charge || 0); // online orders: delivery charged to the customer
+    if (delivery < 0) throw badRequest('Delivery charge cannot be negative');
+    const grandTotal = money(taxable + vat - roundOff - pointsValue + delivery);
     if (grandTotal < 0) throw badRequest('Grand total cannot be negative');
 
     // ---- payments ----
@@ -115,11 +117,11 @@ async function createSaleTx(conn, req, b, { exchange = null } = {}) {
     const r = await conn.q(
       `INSERT INTO sales (invoice_no, customer_id, user_id, subtotal, item_discount, invoice_discount, vat_amount, round_off,
         points_redeemed, points_value, grand_total, paid_amount, change_amount, due_amount, next_payment_date, cost_total, note,
-        bill_offer_id, offer_discount, exchange_credit, exchange_return_id, public_token, salesperson_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        bill_offer_id, offer_discount, exchange_credit, exchange_return_id, public_token, salesperson_id, delivery_charge)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [invoiceNo, customer?.id || null, req.user.id, subtotal, itemDiscount, invoiceDiscount, vat, roundOff,
         pointsRedeemed, pointsValue, grandTotal, paid, change, due, due > 0 ? b.next_payment_date : null, costTotal, b.note || null,
-        billOfferDiscount > 0 ? b.bill_offer_id : null, offerDiscount, credit, exchange?.returnId || null, newToken(), b.salesperson_id || null]
+        billOfferDiscount > 0 ? b.bill_offer_id : null, offerDiscount, credit, exchange?.returnId || null, newToken(), b.salesperson_id || null, delivery]
     );
     const saleId = r.insertId;
 
@@ -161,6 +163,8 @@ async function createSaleTx(conn, req, b, { exchange = null } = {}) {
   }
 }
 
+export { createSaleTx, returnTx, loadSale };
+
 export const create = asyncHandler(async (req, res) => {
   const b = req.body;
   const result = await transaction((conn) => createSaleTx(conn, req, b));
@@ -171,8 +175,19 @@ export const create = asyncHandler(async (req, res) => {
   if (b.send_sms !== false && sale.customer) {
     sendSaleSms(sale, sale.customer).catch((e) => console.error('[sms]', e.message));
   }
+  bigSaleAlert(sale).catch((e) => console.error('[sms]', e.message));
   res.status(201).json(sale);
 });
+
+/** Owner SMS when a bill crosses the big-sale amount. */
+async function bigSaleAlert(sale) {
+  const st = await settings.getAll();
+  const limit = Number(st.big_sale_amount) || 0;
+  if (!limit || st.big_sale_sms !== '1' || !st.owner_phone || Number(sale.grand_total) < limit) return;
+  const who = sale.customer?.name ? ` to ${sale.customer.name}` : '';
+  await sendSms({ phone: st.owner_phone, purpose: 'owner',
+    message: `${st.shop_name}: big sale ${sale.invoice_no}${who} — ${Math.round(Number(sale.grand_total))} Tk (paid ${Math.round(Number(sale.paid_amount))}).` });
+}
 
 async function loadSale(id) {
   const sale = await one(
@@ -212,6 +227,7 @@ export const list = asyncHandler(async (req, res) => {
   if (req.query.to) { where.push('DATE(s.sale_date) <= ?'); params.push(req.query.to); }
   if (req.query.customer_id) { where.push('s.customer_id = ?'); params.push(req.query.customer_id); }
   const qs = req.query;
+  scopeFilter(where, params, 's.branch_id');
   if (qs.due_only === '1') where.push('s.due_amount > 0');
   if (qs.status) { where.push('s.status = ?'); params.push(qs.status); }
   if (qs.pay === 'paid') where.push('s.due_amount <= 0');
@@ -310,7 +326,7 @@ async function returnTx(conn, req, b, { exchange = false } = {}) {
     if (!exchange && !sale.customer_id && refund !== total) throw badRequest('Walk-in returns must be fully refunded');
     let accountId = b.account_id;
     if (refund > 0 && !accountId) {
-      accountId = (await conn.one("SELECT id FROM accounts WHERE type='cash' AND is_active=true ORDER BY is_default DESC, id LIMIT 1"))?.id;
+      accountId = (await conn.one("SELECT id FROM accounts WHERE type='cash' AND is_active=true ORDER BY (branch_id IS NOT DISTINCT FROM bp_branch()) DESC, is_default DESC, id LIMIT 1"))?.id;
       if (!accountId) throw badRequest('Choose the account the refund is paid from');
     }
 
@@ -354,6 +370,7 @@ export const listReturns = asyncHandler(async (req, res) => {
   const qs = req.query;
   const where = ['1=1'];
   const params = [];
+  scopeFilter(where, params, 'r.branch_id');
   if (qs.from) { where.push('DATE(r.return_date) >= ?'); params.push(qs.from); }
   if (qs.to) { where.push('DATE(r.return_date) <= ?'); params.push(qs.to); }
   if (qs.customer_id) { where.push('r.customer_id = ?'); params.push(qs.customer_id); }
@@ -377,7 +394,7 @@ export const getReturn = asyncHandler(async (req, res) => {
   res.json(r);
 });
 
-export { loadSale as loadSale };
+
 
 // ---------- Exchange ----------
 /**
@@ -405,7 +422,7 @@ export const exchange = asyncHandler(async (req, res) => {
         if (!c || c.is_walk_in) throw badRequest('Keeping the balance as credit needs a registered customer');
         refundAmount = sale.credit; // the rest stays on the customer's account as advance
       } else {
-        accountId = b.refund_account_id || (await conn.one("SELECT id FROM accounts WHERE type='cash' AND is_active ORDER BY is_default DESC, id LIMIT 1"))?.id;
+        accountId = b.refund_account_id || (await conn.one("SELECT id FROM accounts WHERE type='cash' AND is_active ORDER BY (branch_id IS NOT DISTINCT FROM bp_branch()) DESC, is_default DESC, id LIMIT 1"))?.id;
         if (!accountId) throw badRequest('Choose the account the difference is paid back from');
         await recordTxn(conn, { accountId, direction: 'out', amount: leftover, refType: 'sale_return', refId: ret.id, note: `${ret.return_no} exchange balance`, date: today(), userId: req.user.id });
       }

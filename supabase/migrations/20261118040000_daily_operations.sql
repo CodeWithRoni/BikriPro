@@ -150,4 +150,4 @@ end $$;
 -- ---------------------------------------------------------------------
 alter table public.sms_logs drop constraint if exists sms_logs_purpose_check;
 alter table public.sms_logs add constraint sms_logs_purpose_check
-  check (purpose in ('sale','birthday','due_reminder','receipt','custom'));
+  check (purpose in ('sale','birthday','due_reminder','receipt','owner','custom'));

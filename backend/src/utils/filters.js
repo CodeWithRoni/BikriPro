@@ -1,3 +1,4 @@
+import { currentScope } from './context.js';
 /** Small helpers shared by list endpoints with filter bars. */
 
 /** Adds `col >= min_<key>` / `col <= max_<key>` when those query params are present. */
@@ -10,3 +11,9 @@ export function addRange(where, params, query, key, col) {
 
 /** Whitelisted ORDER BY: returns map[sort] or the fallback. */
 export const orderBy = (sort, map, fallback) => map[sort] || fallback;
+
+/** Limit a list to the branch being viewed (no filter in the admin's "All branches" view). */
+export function scopeFilter(where, params, col) {
+  const scope = currentScope();
+  if (scope) { where.push(`${col} = ?`); params.push(scope); }
+}

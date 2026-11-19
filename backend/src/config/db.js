@@ -12,6 +12,7 @@
  */
 import { Pool, types } from 'pg';
 import env from './env.js';
+import { currentBranch, currentScope } from '../utils/context.js';
 
 // Return numbers as JS numbers (money is numeric(14,2), counts are bigint)
 types.setTypeParser(1700, (v) => (v === null ? null : parseFloat(v))); // numeric
@@ -32,9 +33,14 @@ const pool = new Pool({
 pool.on('error', (e) => console.error('[db] idle client error', e.message));
 
 // Tables without an `id` column (no RETURNING id on insert)
-const NO_ID = new Set(['settings', 'number_sequences']);
+const NO_ID = new Set(['settings', 'number_sequences', 'branch_stock']);
 
-/** Convert `?` placeholders to $n, expanding array params. */
+/**
+ * Convert `?` placeholders to $n, expanding array params.
+ * Branch tokens (outside quotes):
+ *   @BRANCH — the request's working branch (falls back to the main branch)
+ *   @SCOPE  — the branch lists/reports show; NULL = all branches
+ */
 function toPg(sql, params = []) {
   const out = [];
   let i = 0;
@@ -43,6 +49,13 @@ function toPg(sql, params = []) {
   for (let c = 0; c < sql.length; c += 1) {
     const ch = sql[c];
     if (ch === "'") inStr = !inStr;
+    if (ch === '@' && !inStr && (sql.startsWith('@BRANCH', c) || sql.startsWith('@SCOPE', c))) {
+      const isBranch = sql.startsWith('@BRANCH', c);
+      out.push(isBranch ? currentBranch() : currentScope());
+      text += isBranch ? `COALESCE($${out.length}::bigint, public.bp_main_branch())` : `$${out.length}::bigint`;
+      c += isBranch ? 6 : 5;
+      continue;
+    }
     if (ch === '?' && !inStr) {
       const p = params[i++];
       if (Array.isArray(p) && p.length && Array.isArray(p[0])) {
@@ -92,6 +105,9 @@ async function transaction(fn) {
   };
   try {
     await client.query('BEGIN');
+    // new rows in branch-level tables get this branch (BEFORE INSERT trigger)
+    const branch = currentBranch();
+    if (branch) await client.query("SELECT set_config('bikripro.branch_id', $1, true)", [String(branch)]);
     const result = await fn(conn);
     await client.query('COMMIT');
     return result;

@@ -1,6 +1,6 @@
 import {
   ShoppingCart, LayoutDashboard, Receipt, Undo2, PackagePlus, PackageMinus, Users, Truck,
-  HandCoins, Wallet, Landmark, ReceiptText, Coins, BadgePercent, ClipboardCheck, UsersRound, Lightbulb, Package, TrendingUp, FileBarChart, Settings, History, Barcode, Tags,
+  HandCoins, Wallet, Landmark, ReceiptText, Coins, BadgePercent, ClipboardCheck, UsersRound, Lightbulb, Package, TrendingUp, FileBarChart, Settings, History, Barcode, Tags, Globe, BookOpen, Store, Crown,
 } from 'lucide-react';
 
 /**
@@ -10,7 +10,9 @@ import {
 export const NAV = [
   { to: '/pos', label: 'Point of Sale (POS)', short: 'POS', icon: ShoppingCart, minRole: 'cashier' },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, minRole: 'cashier' },
+  { to: '/owner', label: 'Owner Dashboard', short: 'Owner', icon: Crown, minRole: 'admin' },
   { to: '/sales', label: 'Sales', icon: Receipt, minRole: 'cashier' },
+  { to: '/online-orders', label: 'Online Orders', short: 'Online', icon: Globe, minRole: 'cashier' },
   { to: '/sales-return', label: 'Sales Return', icon: Undo2, minRole: 'manager' },
   { to: '/purchase', label: 'Purchase', icon: PackagePlus, minRole: 'manager' },
   { to: '/purchase-return', label: 'Purchase Return', icon: PackageMinus, minRole: 'manager' },
@@ -20,12 +22,14 @@ export const NAV = [
   { to: '/collection', label: 'Collection', icon: HandCoins, minRole: 'cashier' },
   { to: '/day-closing', label: 'Day Closing', icon: Coins, minRole: 'cashier' },
   { to: '/products', label: 'Products', icon: Package, minRole: 'manager' },
+  { to: '/branches', label: 'Branches & Transfers', short: 'Branches', icon: Store, minRole: 'manager' },
   { to: '/stock-control', label: 'Stock Control', icon: ClipboardCheck, minRole: 'manager' },
   { to: '/offers', label: 'Offers', icon: BadgePercent, minRole: 'manager' },
   { to: '/accounts', label: 'Cash, Bank & MFS', short: 'Accounts', icon: Landmark, minRole: 'manager' },
   { to: '/expenses', label: 'Expenses', icon: ReceiptText, minRole: 'manager' },
   { to: '/staff', label: 'Staff', icon: UsersRound, minRole: 'manager' },
   { to: '/profit', label: 'Profit', icon: TrendingUp, minRole: 'manager' },
+  { to: '/accounting', label: 'Accounting', icon: BookOpen, minRole: 'manager' },
   { to: '/reports', label: 'Report Hub', icon: FileBarChart, minRole: 'manager' },
   { to: '/insights', label: 'Smart Reports', icon: Lightbulb, minRole: 'manager' },
   { to: '/activity', label: 'Activity Log', icon: History, minRole: 'manager' },

@@ -6,7 +6,7 @@
  */
 import { query, one, transaction } from '../config/db.js';
 import { asyncHandler, requireFields, badRequest, notFound, forbidden, paging, money, today } from '../utils/http.js';
-import { addRange, orderBy } from '../utils/filters.js';
+import { addRange, orderBy, scopeFilter } from '../utils/filters.js';
 import { logActivity } from '../utils/activity.js';
 import { nextNumber } from '../utils/numbering.js';
 import { adjustStock } from '../services/stock.service.js';
@@ -66,7 +66,7 @@ export const openSession = asyncHandler(async (req, res) => {
       throw badRequest('You already have an open shift. Close it first.');
     }
     let accountId = b.account_id;
-    if (!accountId) accountId = (await conn.one("SELECT id FROM accounts WHERE type = 'cash' AND is_active ORDER BY is_default DESC, id LIMIT 1"))?.id;
+    if (!accountId) accountId = (await conn.one("SELECT id FROM accounts WHERE type = 'cash' AND is_active ORDER BY (branch_id IS NOT DISTINCT FROM bp_branch()) DESC, is_default DESC, id LIMIT 1"))?.id;
     const acc = await conn.one('SELECT id, type FROM accounts WHERE id = ? AND is_active', [accountId]);
     if (!acc) throw badRequest('Choose the cash drawer account');
     const no = await nextNumber(conn, 'cash_session');
@@ -109,6 +109,7 @@ export const listSessions = asyncHandler(async (req, res) => {
   const qs = req.query;
   const where = ['1=1'];
   const params = [];
+  scopeFilter(where, params, 'cs.branch_id');
   if (!isManager(req)) { where.push('cs.user_id = ?'); params.push(req.user.id); } else if (qs.user_id) { where.push('cs.user_id = ?'); params.push(qs.user_id); }
   if (qs.from) { where.push('DATE(cs.opened_at) >= ?'); params.push(qs.from); }
   if (qs.to) { where.push('DATE(cs.opened_at) <= ?'); params.push(qs.to); }
@@ -142,15 +143,15 @@ export const getSession = asyncHandler(async (req, res) => {
 const REASONS = ['damage', 'lost', 'theft', 'expired', 'found', 'gift', 'other'];
 
 /** Apply one stock adjustment inside a transaction. */
-async function addAdjustment(conn, { variantId, qtyChange, reason, note, refType = 'manual', refId = null, userId, adjNo, date }) {
+async function addAdjustment(conn, { variantId, qtyChange, reason, note, refType = 'manual', refId = null, userId, adjNo, date, branchId = null }) {
   const v = await conn.one('SELECT id, purchase_price FROM product_variants WHERE id = ?', [variantId]);
   if (!v) throw badRequest(`Product variant #${variantId} not found`);
-  await adjustStock(conn, variantId, qtyChange, { allowNegative: true });
+  await adjustStock(conn, variantId, qtyChange, { allowNegative: true, branchId });
   const cost = Number(v.purchase_price) || 0;
   await conn.query(
-    `INSERT INTO stock_adjustments (adj_no, variant_id, qty_change, reason, unit_cost, value, note, ref_type, ref_id, adj_date, user_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-    [adjNo, variantId, qtyChange, reason, cost, money(qtyChange * cost), note || null, refType, refId, date || today(), userId]);
+    `INSERT INTO stock_adjustments (adj_no, variant_id, qty_change, reason, unit_cost, value, note, ref_type, ref_id, adj_date, user_id, branch_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [adjNo, variantId, qtyChange, reason, cost, money(qtyChange * cost), note || null, refType, refId, date || today(), userId, branchId]);
 }
 
 /**
@@ -181,6 +182,7 @@ export const listAdjustments = asyncHandler(async (req, res) => {
   const qs = req.query;
   const where = ['1=1'];
   const params = [];
+  scopeFilter(where, params, 'x.branch_id');
   if (qs.from) { where.push('x.adj_date >= ?'); params.push(qs.from); }
   if (qs.to) { where.push('x.adj_date <= ?'); params.push(qs.to); }
   if (qs.reason) { where.push('x.reason = ?'); params.push(qs.reason); }
@@ -201,8 +203,8 @@ export const listAdjustments = asyncHandler(async (req, res) => {
 // =====================================================================
 // Stock count / audit
 // =====================================================================
-const COUNT_ITEM_SQL = `SELECT ci.*, p.name, v.sku, v.barcode, v.size, v.color, v.stock_qty, v.purchase_price, c.name AS category
-  FROM stock_count_items ci JOIN product_variants v ON v.id = ci.variant_id JOIN products p ON p.id = v.product_id
+const COUNT_ITEM_SQL = `SELECT ci.*, p.name, v.sku, v.barcode, v.size, v.color, bp_stock(v.id, sc0.branch_id) AS stock_qty, v.purchase_price, c.name AS category
+  FROM stock_count_items ci JOIN stock_counts sc0 ON sc0.id = ci.count_id JOIN product_variants v ON v.id = ci.variant_id JOIN products p ON p.id = v.product_id
   LEFT JOIN categories c ON c.id = p.category_id`;
 
 /** POST /stock-counts { title?, note?, category_id?, brand_id?, all? } — optionally preload products to count */
@@ -229,6 +231,7 @@ export const listCounts = asyncHandler(async (req, res) => {
   const { limit, offset, page } = paging(req.query);
   const where = ['1=1'];
   const params = [];
+  scopeFilter(where, params, 'sc.branch_id');
   if (req.query.status) { where.push('sc.status = ?'); params.push(req.query.status); }
   const rows = await query(
     `SELECT sc.*, u.name AS created_by_name, au.name AS applied_by_name,
@@ -308,7 +311,7 @@ export const applyCount = asyncHandler(async (req, res) => {
     if (!sc) throw notFound('Stock count not found');
     if (sc.status !== 'draft') throw badRequest('This count is already finished');
     const items = await conn.q(
-      `SELECT ci.*, v.stock_qty FROM stock_count_items ci JOIN product_variants v ON v.id = ci.variant_id WHERE ci.count_id = ? FOR UPDATE OF v`, [sc.id]);
+      `SELECT ci.*, bp_stock(v.id, ?) AS stock_qty FROM stock_count_items ci JOIN product_variants v ON v.id = ci.variant_id WHERE ci.count_id = ? FOR UPDATE OF v`, [sc.branch_id, sc.id]);
     const adjNo = await nextNumber(conn, 'stock_adjustment');
     let changed = 0;
     for (const it of items) {
@@ -317,7 +320,7 @@ export const applyCount = asyncHandler(async (req, res) => {
       if (counted === null) continue;
       const diff = money(counted - Number(it.stock_qty));
       if (diff === 0) continue;
-      await addAdjustment(conn, { variantId: it.variant_id, qtyChange: diff, reason: 'count', note: `Stock count ${sc.count_no}`, refType: 'stock_count', refId: sc.id, userId: req.user.id, adjNo });
+      await addAdjustment(conn, { variantId: it.variant_id, qtyChange: diff, reason: 'count', note: `Stock count ${sc.count_no}`, refType: 'stock_count', refId: sc.id, userId: req.user.id, adjNo, branchId: sc.branch_id });
       changed += 1;
     }
     await conn.query("UPDATE stock_counts SET status = 'applied', applied_by = ?, applied_at = bp_now() WHERE id = ?", [req.user.id, sc.id]);

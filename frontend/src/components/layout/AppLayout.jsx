@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { Menu, Sun, Moon, Bell, LogOut, KeyRound, ChevronDown, Cake } from 'lucide-react';
+import { Menu, Sun, Moon, Bell, LogOut, KeyRound, ChevronDown, Cake, Store, AlertTriangle, AlertOctagon, Info, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Sidebar from './Sidebar';
 import { NAV } from './nav';
-import api from '../../api/client';
+import api, { getBranch, setBranch } from '../../api/client';
+import Select from '../ui/Select';
 import { toggleTheme, setMobileNav, loggedOut, settingsLoaded } from '../../store';
 import { cls, tk } from '../../utils/format';
 import { Modal, Field } from '../ui';
@@ -17,7 +18,8 @@ export default function AppLayout() {
   const collapsed = useSelector((s) => s.ui.sidebarCollapsed);
   const theme = useSelector((s) => s.ui.theme);
   const user = useSelector((s) => s.auth.user);
-  const [alerts, setAlerts] = useState({ due: [], birthdays: [] });
+  const [alerts, setAlerts] = useState({ due: [], birthdays: [], notes: [], count: 0 });
+  const [branches, setBranches] = useState(null);
   const [menu, setMenu] = useState(false);
   const [bell, setBell] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -31,11 +33,18 @@ export default function AppLayout() {
 
   // Due collection reminders in the top bar (refresh every 5 min)
   useEffect(() => {
-    const load = () => api.get('/dashboard').then((r) => setAlerts({ due: r.data.due_reminders, birthdays: r.data.birthdays })).catch(() => {});
+    const load = () => {
+      api.get('/dashboard').then((r) => setAlerts((a) => ({ ...a, due: r.data.due_reminders, birthdays: r.data.birthdays }))).catch(() => {});
+      api.get('/notifications').then((r) => setAlerts((a) => ({ ...a, notes: r.data.data, count: r.data.count }))).catch(() => {});
+    };
     load();
     const t = setInterval(load, 5 * 60 * 1000);
     return () => clearInterval(t);
   }, [pathname === '/dashboard']); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    api.get('/branches').then((r) => setBranches(r.data)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const close = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) { setMenu(false); setBell(false); } };
@@ -44,7 +53,11 @@ export default function AppLayout() {
   }, []);
 
   const logout = () => { dispatch(loggedOut()); navigate('/login'); };
-  const alertCount = alerts.due.length + alerts.birthdays.length;
+  const alertCount = alerts.count + alerts.birthdays.length;
+  const multiBranch = branches && branches.data.filter((b) => b.is_active).length > 1;
+  const branchValue = branches ? (branches.scope ? String(branches.scope) : (user?.role === 'admin' && getBranch() === 'all' ? 'all' : String(branches.current || ''))) : '';
+  const switchBranch = (v) => { setBranch(v); window.location.reload(); };
+  const branchName = branches?.data.find((b) => Number(b.id) === Number(branches.current))?.name;
   const isPos = pathname.startsWith('/pos');
 
   return (
@@ -58,6 +71,12 @@ export default function AppLayout() {
           </button>
           <h2 className="truncate text-base font-bold text-slate-800 dark:text-white">{current?.label || 'BikriPro'}</h2>
           <div className="ml-auto flex items-center gap-1.5" ref={menuRef}>
+            {multiBranch && (user?.role === 'admin' ? (
+              <Select className="input h-10 w-40 py-1.5 text-sm sm:w-48" aria-label="Branch" value={branchValue} onChange={(e) => switchBranch(e.target.value)}>
+                {branches.data.filter((b) => b.is_active).map((b) => <option key={b.id} value={String(b.id)} data-icon={Store}>{b.name}</option>)}
+                <option value="all" data-icon={Store}>All branches</option>
+              </Select>
+            ) : branchName && <span className="hidden items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 sm:flex"><Store className="h-4 w-4" /> {branchName}</span>)}
             <div className="relative">
               <button type="button" onClick={() => { setBell(!bell); setMenu(false); }} className="relative rounded-xl p-2.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" aria-label="Notifications">
                 <Bell className="h-5 w-5" />
@@ -65,9 +84,20 @@ export default function AppLayout() {
               </button>
               {bell && (
                 <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                  <p className="border-b border-slate-100 px-4 py-3 text-sm font-bold dark:border-slate-800">Due Collection Reminders</p>
-                  <div className="max-h-80 overflow-y-auto">
-                    {alerts.due.length === 0 && alerts.birthdays.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">All caught up 🎉</p>}
+                  <p className="border-b border-slate-100 px-4 py-3 text-sm font-bold dark:border-slate-800">Notifications</p>
+                  <div className="max-h-[26rem] overflow-y-auto">
+                    {alerts.notes.length === 0 && alerts.due.length === 0 && alerts.birthdays.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">All caught up 🎉</p>}
+                    {alerts.notes.map((n, i) => {
+                      const I = { critical: AlertOctagon, warning: AlertTriangle, good: Sparkles, info: Info }[n.level];
+                      const tone = { critical: 'text-rose-600', warning: 'text-amber-600', good: 'text-emerald-600', info: 'text-ocean-600' }[n.level];
+                      return (
+                        <button type="button" key={`${n.type}-${i}`} onClick={() => { setBell(false); if (n.link) navigate(n.link); }} className="flex w-full items-start gap-2.5 px-4 py-2.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
+                          <I className={cls('mt-0.5 h-4 w-4 shrink-0', tone)} />
+                          <span className="min-w-0"><span className="block font-semibold">{n.title}</span>{n.text && <span className="text-xs text-slate-500">{n.text}</span>}</span>
+                        </button>
+                      );
+                    })}
+                    {alerts.due.length > 0 && <p className="border-t border-slate-100 px-4 pb-1 pt-2.5 text-xs font-bold uppercase tracking-wide text-slate-400 dark:border-slate-800">Due collection</p>}
                     {alerts.due.map((d) => (
                       <button type="button" key={d.customer_id} onClick={() => { setBell(false); navigate(`/collection?customer=${d.customer_id}`); }} className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
                         <span className="min-w-0"><span className="block truncate font-semibold">{d.name}</span><span className="text-xs text-slate-500">{d.days_overdue > 0 ? `${d.days_overdue} day(s) overdue` : 'Due today'} · {d.phone}</span></span>

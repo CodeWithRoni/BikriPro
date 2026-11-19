@@ -124,7 +124,7 @@ export const attributes = {
 };
 
 // ---------- Products ----------
-const VARIANT_COLS = 'v.id AS variant_id, v.sku, v.barcode, v.size, v.color, v.purchase_price, v.retail_price, v.wholesale_price, v.stock_qty, v.low_stock_alert';
+const VARIANT_COLS = 'v.id AS variant_id, v.sku, v.barcode, v.size, v.color, v.purchase_price, v.retail_price, v.wholesale_price, bp_stock(v.id, @BRANCH) AS stock_qty, v.low_stock_alert';
 const PRODUCT_COLS = 'p.id AS product_id, p.name, p.image_path, p.is_favorite, p.unit, c.name AS category, b.name AS brand, p.category_id, p.brand_id';
 
 /**
@@ -150,25 +150,25 @@ export const list = asyncHandler(async (req, res) => {
   if (qs.color) { where.push('v.color IN (?)'); params.push(many(qs.color)); }
   if (qs.unit) { where.push('p.unit = ?'); params.push(qs.unit); }
   const stock = qs.stock || (qs.low_stock === '1' ? 'alert' : '');
-  if (stock === 'alert') where.push('v.stock_qty <= v.low_stock_alert'); // legacy low_stock=1: low or out
-  else if (stock === 'in') where.push('v.stock_qty > v.low_stock_alert');
-  else if (stock === 'low') where.push('v.stock_qty > 0 AND v.stock_qty <= v.low_stock_alert');
-  else if (stock === 'out') where.push('v.stock_qty <= 0');
+  if (stock === 'alert') where.push('bp_stock(v.id, @BRANCH) <= v.low_stock_alert'); // legacy low_stock=1: low or out
+  else if (stock === 'in') where.push('bp_stock(v.id, @BRANCH) > v.low_stock_alert');
+  else if (stock === 'low') where.push('bp_stock(v.id, @BRANCH) > 0 AND bp_stock(v.id, @BRANCH) <= v.low_stock_alert');
+  else if (stock === 'out') where.push('bp_stock(v.id, @BRANCH) <= 0');
   if (qs.price === 'unset') where.push('v.retail_price IS NULL');
   if (qs.min_price !== undefined && qs.min_price !== '') { where.push('v.retail_price >= ?'); params.push(Number(qs.min_price)); }
   if (qs.max_price !== undefined && qs.max_price !== '') { where.push('v.retail_price <= ?'); params.push(Number(qs.max_price)); }
   if (qs.favorite === '1') where.push('p.is_favorite = true');
   const SORTS = {
     name: 'p.name, v.size, v.color', newest: 'v.id DESC', price_asc: 'v.retail_price ASC NULLS LAST, p.name',
-    price_desc: 'v.retail_price DESC NULLS LAST, p.name', stock_asc: 'v.stock_qty ASC, p.name', stock_desc: 'v.stock_qty DESC, p.name',
+    price_desc: 'v.retail_price DESC NULLS LAST, p.name', stock_asc: 'bp_stock(v.id, @BRANCH) ASC, p.name', stock_desc: 'bp_stock(v.id, @BRANCH) DESC, p.name',
   };
   const order = SORTS[qs.sort] || SORTS.name;
   const base = `FROM product_variants v JOIN products p ON p.id = v.product_id
     LEFT JOIN categories c ON c.id = p.category_id LEFT JOIN brands b ON b.id = p.brand_id
     WHERE ${where.join(' AND ')}`;
   const [summary] = await query(`SELECT COUNT(*) AS total, COUNT(DISTINCT p.id) AS products,
-      COALESCE(SUM(GREATEST(v.stock_qty, 0)), 0) AS stock_qty,
-      COALESCE(SUM(GREATEST(v.stock_qty, 0) * v.purchase_price), 0) AS stock_value ${base}`, params);
+      COALESCE(SUM(GREATEST(bp_stock(v.id, @BRANCH), 0)), 0) AS stock_qty,
+      COALESCE(SUM(GREATEST(bp_stock(v.id, @BRANCH), 0) * v.purchase_price), 0) AS stock_value ${base}`, params);
   const rows = await query(`SELECT ${PRODUCT_COLS}, pc.name AS parent_category, ${VARIANT_COLS} ${base.replace('LEFT JOIN brands b', 'LEFT JOIN categories pc ON pc.id = c.parent_id LEFT JOIN brands b')} ORDER BY ${order} LIMIT ? OFFSET ?`, [...params, limit, offset]);
   res.json({ data: rows, total: summary.total, page, limit, summary });
 });

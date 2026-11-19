@@ -67,7 +67,25 @@ Every list page has the same advanced filter bar: search, date presets (Today �
 14. **Profit** — net sales, COGS, gross margin, expenses, net profit, by category
 15. **Report Hub** — 11 reports, CSV export, print
 16. **Activity Log** · 17. **Barcode Labels** (load from the last 10 purchases, choose label fields, A4 sheets or thermal presets / custom mm, live preview) · 18. **Price Manager** (unpriced / missing retail / missing wholesale / below-cost filters, inline edit, bulk markup rules)
-19. **Shop Setup** (admin, last in the menu) — shop info & logo, VAT, receipt width, loyalty rates, SMS templates, users & roles, security PIN, **database Export / Import / Reset** (PIN + typed confirmation)
+19. **Shop Setup** (admin, last in the menu) — shop info & logo, VAT, receipt width, loyalty rates, SMS templates, owner alerts, users & roles (with branch), security PIN, **database Export / Import / Reset** (PIN + typed confirmation)
+
+### Daily shop operations
+
+- **Day Closing (shifts)** — each cashier opens a shift with the drawer cash, counts notes at closing; the system shows expected vs counted cash and the shortage / excess per cashier. Optional: require an open shift before selling.
+- **Exchange** — in POS, take back the old item and give the new one on one receipt; the difference is collected or paid back (or kept as customer credit).
+- **Offers & discounts** — percent / flat off, buy X get Y, bill-amount offers, by product, category or brand, with start and end dates; POS applies them automatically.
+- **Stock Control** — scan-to-count stock audits (one click fixes the stock and records the difference) and damage / lost / theft / found entries with reasons; losses appear in Profit.
+- **SMS & WhatsApp** — automatic due reminders on the next payment date (with repeat for overdue), shareable receipt link (`/r/<token>`) by SMS, WhatsApp or copy.
+- **Purchase Orders & re-order suggestions** — the system suggests what to buy from the sales speed, sends POs to suppliers (WhatsApp / print), and receiving a PO creates the purchase.
+- **Smart Reports** — best sizes and colours, dead stock, busy hours and days (heatmap), this year vs last year (e.g. Eid to Eid).
+- **Staff** — employees, sales person on each bill, commission and sales targets, attendance, advances, monthly salary sheet; paid salary goes to Expenses automatically.
+
+### Growing the business
+
+- **Branches & Transfers** — each branch has its own stock, cash drawer, sales, expenses and shifts. Users are tied to a branch; the admin switches branch (or **All branches** for combined reports) from the top bar. Stock transfers leave the sending branch at once and arrive when the other branch receives them.
+- **Online Orders** — Facebook / Instagram / WhatsApp / website / phone orders: new → confirmed → packed → shipped → delivered. Shows earlier orders and returns of the same phone number (spot fake orders). Shipping creates the sale; the advance (bKash etc.) is booked and the rest is the COD due. **Courier paid COD** settles many orders at once and books the courier charge as an expense. A refused / returned parcel goes back into stock. Printable delivery label.
+- **Accounting** — Day Book (every taka in and out with running balance, CSV), Profit & Loss statement, Balance Sheet (cash / bank / MFS, stock at cost, receivables, staff advances vs supplier payables and customer advances).
+- **Owner Dashboard & notifications** — today vs yesterday, sales by hour, best sellers, this month vs the same days last month, money in hand; the bell shows low / out of stock, dues to collect, short cash, old open shifts, big sales, new online orders, COD waiting, incoming transfers, late POs and offers ending. Morning summary SMS and instant big-sale SMS to the owner's phone.
 
 Product images of any size are automatically converted on the server to a **500 × 500 WebP** — trimmed, fitted without cropping or stretching, and compressed (typically 2–40 KB) — on the device itself (browser, desktop or phone app) before upload, then stored in Supabase Storage.
 

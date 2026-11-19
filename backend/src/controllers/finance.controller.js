@@ -2,7 +2,7 @@
  * Cash, Bank & MFS accounts · Supplier Payments · Customer Collections · Expenses
  */
 import { query, one, transaction } from '../config/db.js';
-import { addRange, orderBy } from '../utils/filters.js';
+import { addRange, orderBy, scopeFilter } from '../utils/filters.js';
 import { asyncHandler, requireFields, badRequest, notFound, paging, money, today } from '../utils/http.js';
 import { logActivity } from '../utils/activity.js';
 import { nextNumber } from '../utils/numbering.js';
@@ -14,7 +14,7 @@ const BALANCE_SQL = `a.opening_balance
 
 // ---------- Accounts ----------
 export const listAccounts = asyncHandler(async (req, res) => {
-  const rows = await query(`SELECT a.*, ROUND(${BALANCE_SQL}, 2) AS balance FROM accounts a ORDER BY a.is_active DESC, array_position(ARRAY['cash','mfs','bank','card'], a.type), a.name`);
+  const rows = await query(`SELECT a.*, ROUND(${BALANCE_SQL}, 2) AS balance FROM accounts a WHERE (@SCOPE IS NULL OR a.branch_id IS NULL OR a.branch_id = @SCOPE) ORDER BY a.is_active DESC, array_position(ARRAY['cash','mfs','bank','card'], a.type), a.name`);
   const totals = rows.filter((r) => r.is_active).reduce((t, r) => { t[r.type] = money((t[r.type] || 0) + r.balance); t.all = money((t.all || 0) + r.balance); return t; }, {});
   res.json({ data: rows, totals });
 });
@@ -25,8 +25,8 @@ export const createAccount = asyncHandler(async (req, res) => {
   if (!['cash', 'bank', 'mfs', 'card'].includes(b.type)) throw badRequest('Invalid account type');
   const id = await transaction(async (conn) => {
     if (b.is_default) await conn.query('UPDATE accounts SET is_default = false WHERE type = ?', [b.type]);
-    const r = await conn.q('INSERT INTO accounts (name, type, provider, account_no, branch, opening_balance, is_default) VALUES (?,?,?,?,?,?,?)',
-      [b.name, b.type, b.provider || null, b.account_no || null, b.branch || null, money(b.opening_balance), b.is_default ? 1 : 0]);
+    const r = await conn.q('INSERT INTO accounts (name, type, provider, account_no, branch, opening_balance, is_default, branch_id) VALUES (?,?,?,?,?,?,?,?)',
+      [b.name, b.type, b.provider || null, b.account_no || null, b.branch || null, money(b.opening_balance), b.is_default ? 1 : 0, b.branch_id || null]);
     return r.insertId;
   });
   await logActivity(req, 'accounts', 'create', id, { name: b.name, type: b.type });
@@ -39,8 +39,8 @@ export const updateAccount = asyncHandler(async (req, res) => {
   const b = { ...a, ...req.body };
   await transaction(async (conn) => {
     if (req.body.is_default) await conn.query('UPDATE accounts SET is_default = false WHERE type = ?', [b.type]);
-    await conn.query('UPDATE accounts SET name=?, provider=?, account_no=?, branch=?, opening_balance=?, is_default=?, is_active=? WHERE id=?',
-      [b.name, b.provider, b.account_no, b.branch, money(b.opening_balance), b.is_default ? 1 : 0, b.is_active ? 1 : 0, a.id]);
+    await conn.query('UPDATE accounts SET name=?, provider=?, account_no=?, branch=?, opening_balance=?, is_default=?, is_active=?, branch_id=? WHERE id=?',
+      [b.name, b.provider, b.account_no, b.branch, money(b.opening_balance), b.is_default ? 1 : 0, b.is_active ? 1 : 0, b.branch_id === undefined ? a.branch_id : (b.branch_id || null), a.id]);
   });
   await logActivity(req, 'accounts', 'update', a.id, req.body);
   res.json({ message: 'Saved' });
@@ -119,6 +119,7 @@ export const createPayment = asyncHandler(async (req, res) => {
 
 /** Common filters for money lists (payments, collections, expenses): account, account type, amount range, text search. */
 function moneyFilters(where, params, qs, searchCols) {
+  scopeFilter(where, params, 'x.branch_id');
   if (qs.account_id) { where.push('x.account_id = ?'); params.push(qs.account_id); }
   if (qs.method) { where.push('a.type = ?'); params.push(qs.method); }
   addRange(where, params, qs, 'amount', 'x.amount');

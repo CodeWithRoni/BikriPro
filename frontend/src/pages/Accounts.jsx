@@ -7,6 +7,7 @@ import useApi from '../hooks/useApi';
 import { PageHeader, Modal, Field, DateRange, StatCard, Empty } from '../components/ui';
 import FilterBar, { useFilters, Sum } from '../components/FilterBar';
 import { AccountSelect } from '../components/Pickers';
+import Select from '../components/ui/Select';
 import { tk, num, fmtDate, todayStr, monthStart, cls } from '../utils/format';
 
 const ICON = { cash: Banknote, mfs: Smartphone, card: CreditCard, bank: Building2 };
@@ -15,6 +16,8 @@ const PROVIDERS = { mfs: ['bKash', 'Nagad', 'Rocket', 'Upay', 'Tap', 'OK Wallet'
 export default function Accounts() {
   const isAdmin = useSelector((s) => s.auth.user?.role) === 'admin';
   const { data, reload } = useApi('/accounts');
+  const branches = useApi('/branches');
+  const branchList = (branches.data?.data || []).filter((b) => b.is_active);
   const [edit, setEdit] = useState(null);
   const [transfer, setTransfer] = useState(null);
   const [entry, setEntry] = useState(null);
@@ -106,6 +109,14 @@ export default function Accounts() {
             <Field label="Account name"><input className="input" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="e.g. bKash Merchant" /></Field>
             <Field label={edit.type === 'mfs' ? 'Wallet number' : 'Account number'}><input className="input" value={edit.account_no || ''} onChange={(e) => setEdit({ ...edit, account_no: e.target.value })} /></Field>
             {edit.type === 'bank' && <Field label="Branch"><input className="input" value={edit.branch || ''} onChange={(e) => setEdit({ ...edit, branch: e.target.value })} /></Field>}
+            {branchList.length > 1 && (
+              <Field label="Used by" hint="A branch's cash drawer is only offered in that branch">
+                <Select className="input" value={String(edit.branch_id || '')} onChange={(e) => setEdit({ ...edit, branch_id: e.target.value ? Number(e.target.value) : null })}>
+                  <option value="">All branches (shared)</option>
+                  {branchList.map((b) => <option key={b.id} value={String(b.id)}>{b.name}</option>)}
+                </Select>
+              </Field>
+            )}
             <Field label="Opening balance"><input type="number" className="input" value={edit.opening_balance} onChange={(e) => setEdit({ ...edit, opening_balance: e.target.value })} /></Field>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-ocean-600" checked={edit.is_default} onChange={(e) => setEdit({ ...edit, is_default: e.target.checked })} /> Default for this type</label>
             {edit.id && <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-ocean-600" checked={edit.is_active} onChange={(e) => setEdit({ ...edit, is_active: e.target.checked })} /> Active</label>}

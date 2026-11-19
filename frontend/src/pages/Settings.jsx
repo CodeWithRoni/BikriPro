@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
-import { Settings as SettingsIcon, Save, Upload, Download, ShieldAlert, UserPlus, Pencil, Gift, MessageSquare, Store, Users, Database, KeyRound, Send, Cake } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Settings as SettingsIcon, Save, Upload, Download, ShieldAlert, UserPlus, Pencil, Gift, MessageSquare, Store, Users, Database, KeyRound, Send, Cake, Crown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { fileUrl } from '../api/client';
 import useApi from '../hooks/useApi';
@@ -10,11 +11,12 @@ import { fmtDateTime, tk, cls } from '../utils/format';
 import { processLogo, blobName } from '../utils/image';
 import Select from '../components/ui/Select';
 
-const TABS = [['shop', 'Shop info'], ['loyalty', 'Loyalty'], ['sms', 'SMS'], ['users', 'Users'], ['security', 'Security PIN'], ['data', 'Backup & Reset']];
+const TABS = [['shop', 'Shop info'], ['loyalty', 'Loyalty'], ['sms', 'SMS'], ['owner', 'Owner alerts'], ['users', 'Users'], ['security', 'Security PIN'], ['data', 'Backup & Reset']];
 
 export default function Settings() {
   const dispatch = useDispatch();
-  const [tab, setTab] = useState('shop');
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(params.get('tab') || 'shop');
   const { data, reload } = useApi('/settings');
   const [s, setS] = useState({});
   useEffect(() => { if (data) setS(data); }, [data]);
@@ -47,6 +49,18 @@ export default function Settings() {
         </Section>
       )}
       {tab === 'sms' && <Sms s={s} bind={bind} toggle={toggle} save={save} />}
+      {tab === 'owner' && (
+        <Section icon={Crown} title="Owner alerts on your mobile" onSave={() => save(['owner_phone', 'owner_daily_sms', 'big_sale_amount', 'big_sale_sms', 'online_default_delivery'])}>
+          <Field label="Owner mobile number" hint="Summary and alert SMS go here"><input className="input" inputMode="tel" placeholder="01XXXXXXXXX" {...bind('owner_phone')} /></Field>
+          <label className="flex items-center gap-2 self-end pb-3 text-sm"><input type="checkbox" className="accent-ocean-600" {...toggle('owner_daily_sms')} /> SMS me yesterday's summary every morning</label>
+          <Field label="Big sale amount (Tk)" hint="Bills at or above this are highlighted — 0 turns it off"><input type="number" min="0" className="input" {...bind('big_sale_amount')} /></Field>
+          <label className="flex items-center gap-2 self-end pb-3 text-sm"><input type="checkbox" className="accent-ocean-600" {...toggle('big_sale_sms')} /> SMS me right away on a big sale</label>
+          <Field label="Default delivery charge for online orders (Tk)"><input type="number" min="0" className="input" {...bind('online_default_delivery')} /></Field>
+          <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300 sm:col-span-2">
+            The morning summary says: sales, bills, profit, expenses, dues collected, returns, new dues and any cash short at day closing. Low stock, overdue dues, short cash, late purchase orders and new online orders also show in the bell at the top and on the Owner Dashboard.
+          </div>
+        </Section>
+      )}
       {tab === 'users' && <UsersTab />}
       {tab === 'security' && <PinTab pinSet={data?.security_pin_set} onDone={reload} />}
       {tab === 'data' && <DataTab />}
@@ -127,6 +141,8 @@ function Sms({ s, bind, toggle, save }) {
 
 function UsersTab() {
   const { data, reload } = useApi('/users');
+  const branches = useApi('/branches');
+  const brList = (branches.data?.data || []).filter((b) => b.is_active);
   const [u, setU] = useState(null);
   const save = async () => {
     try { if (u.id) await api.put(`/users/${u.id}`, u); else await api.post('/users', u); toast.success('Saved'); setU(null); reload(); } catch (e) { toast.error(e.message); }
@@ -135,10 +151,11 @@ function UsersTab() {
     <div className="max-w-4xl">
       <div className="mb-3 flex justify-end"><button type="button" className="btn-primary" onClick={() => setU({ name: '', username: '', phone: '', password: '', role: 'cashier', is_active: 1 })}><UserPlus className="h-4 w-4" /> Add user</button></div>
       <div className="table-wrap"><table className="table">
-        <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th /></tr></thead>
+        <thead><tr><th>Name</th><th>Username</th><th>Role</th>{brList.length > 1 && <th>Branch</th>}<th>Status</th><th>Last login</th><th /></tr></thead>
         <tbody>{data?.map((x) => (
           <tr key={x.id}><td className="font-semibold">{x.name}<div className="text-xs font-normal text-slate-500">{x.phone}</div></td><td>{x.username}</td>
             <td><Badge tone={{ admin: 'rose', manager: 'ocean', cashier: 'slate' }[x.role]}>{x.role}</Badge></td>
+            {brList.length > 1 && <td>{x.branch_name || <span className="text-slate-400">{x.role === 'admin' ? 'All' : 'Main'}</span>}</td>}
             <td>{x.is_active ? <Badge tone="green">active</Badge> : <Badge>disabled</Badge>}</td><td className="text-slate-500">{fmtDateTime(x.last_login_at)}</td>
             <td><button type="button" className="btn-ghost btn-sm" onClick={() => setU({ ...x, password: '' })}><Pencil className="h-4 w-4" /></button></td></tr>
         ))}</tbody>
@@ -150,6 +167,14 @@ function UsersTab() {
           {!u.id && <Field label="Username"><input className="input" value={u.username} onChange={(e) => setU({ ...u, username: e.target.value })} /></Field>}
           <Field label="Phone"><input className="input" value={u.phone || ''} onChange={(e) => setU({ ...u, phone: e.target.value })} /></Field>
           <Field label="Role"><Select className="input" value={u.role} onChange={(e) => setU({ ...u, role: e.target.value })}><option value="cashier">Cashier</option><option value="manager">Manager</option><option value="admin">Admin</option></Select></Field>
+          {brList.length > 1 && (
+            <Field label="Works in branch" hint={u.role === 'admin' ? 'Admins can switch branch from the top bar' : 'This user sells and sees stock of this branch only'}>
+              <Select className="input" value={String(u.branch_id || '')} onChange={(e) => setU({ ...u, branch_id: e.target.value ? Number(e.target.value) : null })}>
+                <option value="">Main branch</option>
+                {brList.filter((b) => !b.is_main).map((b) => <option key={b.id} value={String(b.id)}>{b.name}</option>)}
+              </Select>
+            </Field>
+          )}
           <Field label={u.id ? 'New password (leave blank to keep)' : 'Password'}><input type="password" className="input" value={u.password} onChange={(e) => setU({ ...u, password: e.target.value })} /></Field>
           {u.id && <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-ocean-600" checked={!!u.is_active} onChange={(e) => setU({ ...u, is_active: e.target.checked ? 1 : 0 })} /> Active</label>}
         </div>}

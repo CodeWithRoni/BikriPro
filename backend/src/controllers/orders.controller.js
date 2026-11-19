@@ -5,7 +5,7 @@
  */
 import { query, one, transaction } from '../config/db.js';
 import { asyncHandler, requireFields, badRequest, notFound, paging, money } from '../utils/http.js';
-import { addRange, orderBy } from '../utils/filters.js';
+import { addRange, orderBy, scopeFilter } from '../utils/filters.js';
 import { logActivity } from '../utils/activity.js';
 import { nextNumber } from '../utils/numbering.js';
 import { createPurchaseTx } from './purchases.controller.js';
@@ -40,6 +40,7 @@ export const list = asyncHandler(async (req, res) => {
   const qs = req.query;
   const where = ['1=1'];
   const params = [];
+  scopeFilter(where, params, 'po.branch_id');
   if (qs.from) { where.push('po.order_date >= ?'); params.push(qs.from); }
   if (qs.to) { where.push('po.order_date <= ?'); params.push(qs.to); }
   if (qs.supplier_id) { where.push('po.supplier_id = ?'); params.push(qs.supplier_id); }

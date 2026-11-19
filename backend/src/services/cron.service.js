@@ -60,13 +60,32 @@ async function runDueReminders({ force = false, customerId = null } = {}) {
   return { sent, total: rows.length };
 }
 
+/** SMS yesterday's summary to the owner (owner_daily_sms + owner_phone). */
+async function runOwnerSummary({ force = false, date = null } = {}) {
+  const s = await settings.getAll();
+  if (!s.owner_phone || (!force && s.owner_daily_sms !== '1')) return { skipped: true };
+  const { dailySummary } = await import('../controllers/accounting.controller.js');
+  let d = date;
+  if (!d) {
+    const [{ y }] = await query("SELECT (bp_today() - 1)::text AS y");
+    d = y;
+  }
+  const x = await dailySummary(d);
+  const fmt = (n) => Math.round(Number(n)).toLocaleString('en-IN');
+  const cash = x.cash_variance ? ` Cash ${x.cash_variance < 0 ? 'short' : 'over'} ${fmt(Math.abs(x.cash_variance))}.` : '';
+  const message = `${s.shop_name} ${d}: Sale ${fmt(x.sales)} Tk (${x.bills} bills), Profit ${fmt(x.gross)}, Expense ${fmt(x.expenses)}, Collected ${fmt(x.collected)}, Return ${fmt(x.returns)}, New due ${fmt(x.due)}.${cash}`;
+  const r = await sendSms({ phone: s.owner_phone, message, purpose: 'owner' });
+  return { status: r.status, message };
+}
+
 /** Everything that runs once a day. */
 async function runDailyJobs() {
-  const [birthdays, dueReminders] = await Promise.all([
+  const [birthdays, dueReminders, owner] = await Promise.all([
     runBirthdayWishes().catch((e) => ({ error: e.message })),
     runDueReminders().catch((e) => ({ error: e.message })),
+    runOwnerSummary().catch((e) => ({ error: e.message })),
   ]);
-  return { birthdays, due_reminders: dueReminders };
+  return { birthdays, due_reminders: dueReminders, owner_summary: owner };
 }
 
 async function startCron() {
@@ -83,4 +102,4 @@ async function startCron() {
   console.log(`[cron] birthday SMS scheduled "${env.birthdayCron}" (${env.timezone})`);
 }
 
-export { startCron, runBirthdayWishes, runDueReminders, runDailyJobs };
+export { startCron, runBirthdayWishes, runDueReminders, runDailyJobs, runOwnerSummary };

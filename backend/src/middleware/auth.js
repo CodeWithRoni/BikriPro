@@ -6,6 +6,15 @@ import { appSecret } from '../services/settings.service.js';
 const jwtSecret = async () => env.jwtSecret || appSecret('jwt_secret');
 import { one } from '../config/db.js';
 import { HttpError } from '../utils/http.js';
+import { runWithContext } from '../utils/context.js';
+
+let mainCache = { id: null, at: 0 };
+async function mainBranch() {
+  if (mainCache.id && Date.now() - mainCache.at < 60000) return mainCache.id;
+  const r = await one('SELECT bp_main_branch() AS id');
+  mainCache = { id: r?.id || null, at: Date.now() };
+  return mainCache.id;
+}
 
 /** Verify Bearer JWT and attach req.user = { id, name, username, role }. */
 async function authenticate(req, res, next) {
@@ -19,10 +28,21 @@ async function authenticate(req, res, next) {
     } catch {
       throw new HttpError(401, 'Session expired, please log in again');
     }
-    const user = await one('SELECT id, name, username, role, is_active FROM users WHERE id = ?', [payload.sub]);
+    const user = await one('SELECT id, name, username, role, is_active, branch_id FROM users WHERE id = ?', [payload.sub]);
     if (!user || !user.is_active) throw new HttpError(401, 'Account disabled');
     req.user = user;
-    next();
+    // Branch: staff work in their own branch; an admin may switch (X-Branch-Id: <id> | all)
+    const own = user.branch_id || (await mainBranch());
+    let branchId = own;
+    let scope = own;
+    const wanted = String(req.headers['x-branch-id'] || '');
+    if (user.role === 'admin' && wanted) {
+      if (wanted === 'all') scope = null;
+      else if (await one('SELECT id FROM branches WHERE id = ? AND is_active', [wanted])) { branchId = Number(wanted); scope = branchId; }
+    }
+    req.branchId = branchId;
+    req.branchScope = scope;
+    runWithContext({ branchId, scope }, () => next());
   } catch (err) {
     next(err);
   }

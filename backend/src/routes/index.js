@@ -20,6 +20,9 @@ import * as offers from '../controllers/offers.controller.js';
 import * as orders from '../controllers/orders.controller.js';
 import * as staff from '../controllers/staff.controller.js';
 import * as insights from '../controllers/insights.controller.js';
+import * as branches from '../controllers/branches.controller.js';
+import * as online from '../controllers/online.controller.js';
+import * as accounting from '../controllers/accounting.controller.js';
 
 const r = express.Router();
 const M = authorize('manager');
@@ -191,6 +194,37 @@ r.post('/staff/advances', M, staff.giveAdvance);
 r.get('/staff/salary', M, staff.salarySheet);
 r.post('/staff/salary', M, staff.paySalary);
 r.get('/staff/performance', M, staff.performance);
+
+// ---------- Online orders ----------
+r.get('/online-orders', online.list);
+r.get('/online-orders/customer', online.customerHistory);
+r.post('/online-orders/settle', M, online.settle);
+r.post('/online-orders', online.create);
+r.get('/online-orders/:id', online.get);
+r.put('/online-orders/:id', online.update);
+r.post('/online-orders/:id/status', online.setStatus);
+
+// ---------- Accounting, notifications & owner ----------
+r.get('/accounting/daybook', M, accounting.daybook);
+r.get('/accounting/pnl', M, accounting.pnl);
+r.get('/accounting/balance-sheet', A, accounting.balanceSheet);
+r.get('/notifications', accounting.notifications);
+r.get('/owner/summary', A, accounting.ownerSummary);
+r.post('/owner/summary-sms', A, async (req, res, next) => {
+  try { const { runOwnerSummary } = await import('../services/cron.service.js'); res.json(await runOwnerSummary({ force: true })); } catch (e) { next(e); }
+});
+
+// ---------- Branches & stock transfers ----------
+r.get('/branches', branches.list);
+r.get('/branches/overview', A, branches.overview);
+r.get('/branches/stock', branches.stockByBranch);
+r.post('/branches', A, branches.create);
+r.put('/branches/:id', A, branches.update);
+r.get('/transfers', M, branches.listTransfers);
+r.post('/transfers', M, branches.send);
+r.get('/transfers/:id', M, branches.getTransfer);
+r.post('/transfers/:id/receive', M, branches.receive);
+r.post('/transfers/:id/cancel', M, branches.cancel);
 
 // ---------- Activity Log ----------
 r.get('/activity', M, reports.activity);

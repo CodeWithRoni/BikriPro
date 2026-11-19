@@ -34,6 +34,10 @@ const pages = {
   '/offers': lazy(() => import('./pages/Offers')),
   '/staff': lazy(() => import('./pages/Staff')),
   '/insights': lazy(() => import('./pages/Insights')),
+  '/owner': lazy(() => import('./pages/Owner')),
+  '/online-orders': lazy(() => import('./pages/OnlineOrders')),
+  '/branches': lazy(() => import('./pages/Branches')),
+  '/accounting': lazy(() => import('./pages/Accounting')),
 };
 
 function RequireAuth({ children }) {
