@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, Package, Banknote, Smartphone, Building2, CreditCard } from 'lucide-react';
+import { Search, Package, Banknote, Smartphone, Building2, CreditCard, ScanBarcode } from 'lucide-react';
 import api, { fileUrl } from '../api/client';
 import { useDebounced } from './ui';
 import { tk, variantLabel, cls } from '../utils/format';
@@ -65,7 +65,7 @@ export function PartyPicker({ type = 'customer', value, onChange, placeholder, a
  * Product variant search (name / SKU / barcode). Enter on an exact barcode
  * adds immediately — works with USB/Bluetooth barcode scanners.
  */
-export function ProductPicker({ onPick, placeholder = 'Search product, SKU or scan barcode…', autoFocus = false, inputRef }) {
+export function ProductPicker({ onPick, placeholder = 'Search product, SKU or scan barcode…', autoFocus = false, inputRef, variant, suffix }) {
   const [q, setQ] = useState('');
   const [list, setList] = useState([]);
   const [open, setOpen] = useState(false);
@@ -105,9 +105,20 @@ export function ProductPicker({ onPick, placeholder = 'Search product, SKU or sc
 
   return (
     <div className="relative flex-1" ref={ref}>
-      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-      <input ref={inputRef} autoFocus={autoFocus} className="input h-12 pl-11 text-base" placeholder={placeholder}
-        value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKey} />
+      {variant === 'pos' ? (
+        <label className="flex h-11 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 transition focus-within:border-ocean-500 focus-within:ring-4 focus-within:ring-ocean-100 dark:border-slate-700 dark:bg-slate-900 dark:focus-within:ring-ocean-900/40">
+          <ScanBarcode className="h-[18px] w-[18px] shrink-0 text-slate-500 dark:text-slate-400" />
+          <input ref={inputRef} autoFocus={autoFocus} className="min-w-0 flex-1 bg-transparent text-[13.5px] text-slate-900 outline-none placeholder:text-slate-500 dark:text-white dark:placeholder:text-slate-400" placeholder={placeholder}
+            value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKey} />
+          {suffix}
+        </label>
+      ) : (
+        <>
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+          <input ref={inputRef} autoFocus={autoFocus} className="input h-12 pl-11 text-base" placeholder={placeholder}
+            value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKey} />
+        </>
+      )}
       {open && list.length > 0 && (
         <div className="absolute z-30 mt-1 max-h-96 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
           {list.map((p, i) => (

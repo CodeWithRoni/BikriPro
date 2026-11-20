@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import {
-  PauseCircle, UserPlus, Printer, Trash2, X, Gift, Repeat2, BadgePercent, Coins, Undo2, History, Wallet, Maximize2, Minimize2,
-  CalendarDays, FileText, NotebookPen, Layers, Banknote, ShoppingCart, Pencil, UserRound, ChevronUp,
+  Pause, UserPlus, Printer, X, Repeat2, Coins, Undo2, History, Wallet, Maximize, Minimize, ArrowLeftRight,
+  CalendarDays, FileText, BookOpen, Layers, Banknote, ShoppingCart, Pencil, UserRound, ChevronUp, Tag,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
@@ -21,6 +22,7 @@ import RecentDrawer from '../components/pos/RecentDrawer';
 import ExchangeModal from '../components/pos/ExchangeModal';
 import { QuickExpense, QuotationModal } from '../components/pos/SmallModals';
 import { Kbd, TotalCell } from '../components/pos/parts';
+import { POS_PILL, POS_BTN } from '../components/layout/AppLayout';
 import { computeOffers } from '../utils/offers';
 import { tk, num, variantLabel, cls } from '../utils/format';
 
@@ -40,7 +42,7 @@ function reducer(state, a) {
       if (i >= 0) return { ...state, items: state.items.map((x, j) => (j === i ? { ...x, qty: Number(x.qty) + 1 } : x)) };
       const item = {
         variant_id: p.variant_id, name: p.name, label: variantLabel(p), sku: p.sku, image_path: p.image_path,
-        product_id: p.product_id, category_id: p.category_id, brand_id: p.brand_id, low_alert: p.low_stock_alert,
+        product_id: p.product_id, category_id: p.category_id, brand_id: p.brand_id, low_alert: p.low_stock_alert, size: p.size, color: p.color,
         retail_price: p.retail_price, wholesale_price: p.wholesale_price, stock: p.stock_qty, qty: 1, discount: '',
       };
       return { ...state, items: [...state.items, { ...item, unit_price: priceFor(item, state.priceMode) }] };
@@ -85,6 +87,10 @@ export default function POS() {
   const [now, setNow] = useState(new Date());
   const [reloadKey, setReloadKey] = useState(0);
   const [quoteKey, setQuoteKey] = useState(0);
+  const [print, setPrintState] = useState(() => localStorage.getItem('bp_pos_print') !== '0');
+  const setPrint = (v) => { setPrintState(v); try { localStorage.setItem('bp_pos_print', v ? '1' : '0'); } catch { /* ignore */ } };
+  const [toolbarSlot, setToolbarSlot] = useState(null);
+  useEffect(() => { setToolbarSlot(document.getElementById('pos-toolbar')); }, []);
   const searchRef = useRef(null);
   const popRef = useRef(null);
 
@@ -130,6 +136,7 @@ export default function POS() {
     const tendered = payments.reduce((s, p) => s + n(p.amount), 0);
     return {
       subtotal, itemOffer, billOffer, offerTotal: r2(itemOffer + billOffer), manualDiscount: r2(manualItemDiscount + n(cart.invoiceDiscount)),
+      lines: r2(subtotal - manualItemDiscount - itemOffer), billDiscount: r2(n(cart.invoiceDiscount) + billOffer + pointValue),
       vat, pointValue, grand, credit, net, leftover, tendered,
       change: Math.max(r2(tendered - net), 0), due: Math.max(r2(net - tendered), 0), qty: cart.items.reduce((s, i) => s + n(i.qty), 0),
     };
@@ -268,12 +275,18 @@ export default function POS() {
   // Keyboard: F2 search · F4/F8 hold · F6 credit · F7 split · F9 cash / complete · F10 pay / complete & print
   useEffect(() => {
     const onKey = (e) => {
+      if (e.key === 'Escape') {
+        if (payMode || drawer || pop || quoteOpen || expOpen || exOpen || quickAdd || done || sheet) return;
+        if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName) && e.target.value) return; // let Esc clear a typed search first
+        if (cart.items.length || cart.customer) { e.preventDefault(); clearCart(); }
+        return;
+      }
       if (!/^F(2|4|6|7|8|9|10)$/.test(e.key)) return;
       if (quoteOpen || expOpen || exOpen || quickAdd || done) return;
       e.preventDefault();
       if (payMode) {
         if (e.key === 'F9') complete(false);
-        if (e.key === 'F10') complete(true);
+        if (e.key === 'F10') complete(print);
         return;
       }
       if (e.key === 'F2') searchRef.current?.focus();
@@ -291,57 +304,70 @@ export default function POS() {
   const canRedeem = cart.customer && settings.loyalty_enabled === '1' && customerPoints >= n(settings.loyalty_min_redeem_points);
   const shiftOn = shift.data?.session;
   const offerCount = new Set([...Object.values(offers.lines).map((o) => o.offer_id), ...(offers.bill ? [offers.bill.offer_id] : [])]).size;
-  const dateText = now.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true });
+  const dateText = `${now.toLocaleDateString('en-GB', { weekday: 'short' })}, ${now.getDate()} ${now.toLocaleDateString('en-GB', { month: 'short' })} · ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+
+  // ---------------- toolbar (rendered into the POS top bar) ----------------
+  const shiftSince = shiftOn?.opened_at ? new Date(String(shiftOn.opened_at).replace(' ', 'T')).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+  const toolbar = (
+    <>
+      <Link to="/day-closing" title={shiftOn ? 'Your shift is open — Day Closing' : 'Open your shift in Day Closing'}
+        className={cls(POS_PILL, 'hidden lg:inline-flex', !shiftOn && settings.shift_required === '1' && '!border-rose-300 !bg-rose-50 !text-rose-700 dark:!border-rose-800 dark:!bg-rose-900/20 dark:!text-rose-300')}>
+        <span className={cls('h-[7px] w-[7px] rounded-full', shiftOn ? 'bg-emerald-500 shadow-[0_0_0_3px_theme(colors.emerald.100)] dark:shadow-[0_0_0_3px_rgb(6_78_59/.6)]' : 'bg-slate-300 dark:bg-slate-600')} />
+        {shiftOn ? `Shift open · ${shiftOn.user_name || user?.name}${shiftSince ? ` · since ${shiftSince}` : ''}` : 'No shift open'}
+      </Link>
+      <span className={cls(POS_PILL, 'hidden tabular-nums 2xl:inline-flex')}><CalendarDays className="h-[15px] w-[15px]" />{dateText}</span>
+      <div className="flex-1" />
+      <button type="button" className={cls(POS_BTN, 'relative')} onClick={() => setDrawer('held')} title="Held bills">
+        <Pause className="h-[15px] w-[15px]" /><span className="hidden md:inline">Held</span>
+        {held.data?.length > 0 && <span className="absolute -right-1.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-rose-600 px-1 text-[10.5px] font-bold text-white dark:border-slate-900">{held.data.length}</span>}
+      </button>
+      <button type="button" className={POS_BTN} onClick={() => setDrawer('sales')} title="Recent transactions"><History className="h-[15px] w-[15px]" /><span className="hidden md:inline">Recent</span></button>
+      {isManager && <button type="button" className={cls(POS_BTN, 'hidden sm:inline-flex', cart.exchange && '!border-amber-400 !text-amber-700')} onClick={() => setExOpen(true)} title="Exchange"><ArrowLeftRight className="h-[15px] w-[15px]" /><span className="hidden xl:inline">Exchange</span></button>}
+      {isManager && <button type="button" className={cls(POS_BTN, 'hidden sm:inline-flex')} onClick={() => setExpOpen(true)} title="Add expense"><Wallet className="h-[15px] w-[15px]" /><span className="hidden xl:inline">Expense</span></button>}
+      <Link to="/day-closing" className={cls(POS_BTN, 'hidden sm:inline-flex')} title={shiftOn ? 'Close shift' : 'Open shift'}><Coins className="h-[15px] w-[15px]" /><span className="hidden xl:inline">{shiftOn ? 'Close shift' : 'Open shift'}</span></Link>
+      <button type="button" className={cls(POS_BTN, 'hidden sm:inline-flex')} title={full ? 'Exit full screen' : 'Full screen'} aria-label="Full screen" onClick={toggleFull}>{full ? <Minimize className="h-[15px] w-[15px]" /> : <Maximize className="h-[15px] w-[15px]" />}</button>
+    </>
+  );
 
   // ---------------- cart card ----------------
+  const chip = 'inline-flex h-[26px] items-center gap-1 rounded-full px-2.5 text-[11.5px] font-bold transition';
   const cartCard = (
-    <section className="card flex min-h-0 flex-1 flex-col">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgb(15_23_42/.05),0_1px_3px_rgb(15_23_42/.04)] dark:border-slate-800 dark:bg-slate-900">
       {/* search + customer */}
-      <div className="grid gap-2.5 p-3 pb-2.5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-        <div className="relative">
-          <ProductPicker onPick={add} autoFocus inputRef={searchRef} placeholder="Scan barcode or type product name, SKU…" />
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"><Kbd>F2</Kbd></span>
-        </div>
-        <div className="flex gap-2">
-          <div className="min-w-0 flex-1"><PartyPicker type="customer" value={cart.customer} onChange={(c) => dispatch({ type: 'field', key: 'customer', value: c })} placeholder="Walk-in customer — search name or phone…" /></div>
-          <button type="button" className="btn-secondary px-3" title="Add a new customer" aria-label="Add a new customer" onClick={() => setQuickAdd(true)}><UserPlus className="h-4 w-4 text-ocean-600" /></button>
-        </div>
+      <div className="grid gap-2.5 px-3.5 pb-2.5 pt-3.5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <ProductPicker variant="pos" onPick={add} autoFocus inputRef={searchRef} placeholder="Scan barcode or type product name, SKU…" suffix={<Kbd>F2</Kbd>} />
+        <CustomerBox customer={cart.customer} onChange={(c) => dispatch({ type: 'field', key: 'customer', value: c })} onAdd={() => setQuickAdd(true)} loyalty={settings.loyalty_enabled === '1'} />
       </div>
 
       {/* meta row */}
-      <div className="flex flex-wrap items-center gap-2 px-3 pb-2.5 text-xs">
+      <div className="flex flex-wrap items-center gap-2 px-3.5 pb-2.5">
         {staffApi.data?.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <UserRound className="h-3.5 w-3.5 text-slate-400" />
-            <Select className="input h-8 w-40 py-1 text-xs" value={String(cart.salesperson || '')} onChange={(e) => dispatch({ type: 'field', key: 'salesperson', value: e.target.value })} aria-label="Sales person">
-              <option value="">Sales person</option>{staffApi.data.map((x) => <option key={x.id} value={String(x.id)}>{x.name}</option>)}
-            </Select>
-          </div>
-        )}
-        <div className="inline-flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800" role="group" aria-label="Price list">
-          {[['retail', 'Retail'], ['wholesale', 'Wholesale']].map(([k, l]) => (
-            <button type="button" key={k} onClick={() => dispatch({ type: 'priceMode', mode: k })}
-              className={cls('rounded-md px-2.5 py-1 font-semibold transition', cart.priceMode === k ? 'bg-white text-ocean-700 shadow-sm dark:bg-slate-700 dark:text-ocean-200' : 'text-slate-500')}>{l}</button>
-          ))}
-        </div>
-        {cart.customer && !cart.customer.is_walk_in && (
           <>
-            {n(cart.customer.balance) > 0 && <span className="badge bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300">Old due {tk(cart.customer.balance)}</span>}
-            {settings.loyalty_enabled === '1' && <span className="badge bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-300"><Gift className="h-3 w-3" /> {num(customerPoints)} pts</span>}
+            <span className="text-xs text-slate-500 dark:text-slate-400">Sales person</span>
+            <div className="w-[8.5rem]">
+              <Select className={cls(chip, 'w-full border border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300')} value={String(cart.salesperson || '')} onChange={(e) => dispatch({ type: 'field', key: 'salesperson', value: e.target.value })} aria-label="Sales person">
+                <option value="" data-icon={UserRound}>Not set</option>{staffApi.data.map((x) => <option key={x.id} value={String(x.id)} data-icon={UserRound}>{x.name}</option>)}
+              </Select>
+            </div>
           </>
         )}
+        <span className="ml-1.5 text-xs text-slate-500 dark:text-slate-400">Price</span>
+        {[['retail', 'Retail'], ['wholesale', 'Wholesale']].map(([k, l]) => (
+          <button type="button" key={k} onClick={() => dispatch({ type: 'priceMode', mode: k })}
+            className={cls(chip, cart.priceMode === k ? 'bg-ocean-50 text-ocean-700 dark:bg-ocean-900/40 dark:text-ocean-200' : 'border border-slate-200 bg-slate-50 text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400')}>{l}</button>
+        ))}
         {(offersApi.data?.length > 0) && (
           <button type="button" onClick={() => dispatch({ type: 'field', key: 'noOffers', value: !cart.noOffers })}
             title={cart.noOffers ? 'Offers are off for this bill — click to turn on' : 'Click to turn offers off for this bill'}
-            className={cls('badge ml-auto transition', cart.noOffers ? 'bg-slate-100 text-slate-500 line-through dark:bg-slate-800' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300')}>
-            <BadgePercent className="h-3.5 w-3.5" /> {cart.noOffers ? 'Offers off' : offerCount ? `${offerCount} offer${offerCount > 1 ? 's' : ''} · saved ${tk(t.offerTotal)}` : 'Offers on'}
+            className={cls(chip, 'ml-auto', cart.noOffers ? 'border border-slate-200 bg-slate-50 text-slate-500 line-through dark:border-slate-700 dark:bg-slate-800' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300')}>
+            <Tag className="h-[15px] w-[15px]" /> {cart.noOffers ? 'Offers off' : offerCount ? `${offerCount} offer${offerCount > 1 ? 's' : ''} applied · saved ${tk(t.offerTotal)}` : 'Offers on'}
           </button>
         )}
       </div>
 
       {/* exchange banner */}
       {cart.exchange && (
-        <div className="mx-3 mb-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
+        <div className="mx-3.5 mb-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
           <div className="flex items-center gap-2">
             <Repeat2 className="h-4 w-4 shrink-0 text-amber-600" />
             <p className="min-w-0 flex-1 font-semibold text-amber-800 dark:text-amber-300">Exchange for {cart.exchange.invoice_no} · returned {tk(cart.exchange.credit)}</p>
@@ -364,28 +390,28 @@ export default function POS() {
 
       {/* lines */}
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-slate-200 dark:border-slate-800">
-        <CartTable items={cart.items} offers={offers} dispatch={dispatch} selected={selected} onSelect={setSelected} />
+        <CartTable items={cart.items} offers={offers} offerList={offersApi.data} dispatch={dispatch} selected={selected} onSelect={setSelected} />
       </div>
 
       {/* totals strip */}
-      <div ref={popRef} className="relative grid grid-cols-3 border-t border-slate-200 dark:border-slate-800 sm:grid-cols-[repeat(5,minmax(0,1fr))_minmax(max-content,1.5fr)]">
-        <TotalCell label="Items" value={<>{num(t.qty)} <span className="text-xs font-semibold text-slate-400">pcs</span></>} />
-        <TotalCell label="Subtotal" value={tk(t.subtotal - t.itemOffer)} />
-        <TotalCell label="Discount" icon={Pencil} value={t.manualDiscount + t.billOffer + t.pointValue > 0 ? `− ${tk(t.manualDiscount + t.billOffer + t.pointValue)}` : tk(0)}
-          tone={t.manualDiscount + t.billOffer + t.pointValue > 0 ? 'text-rose-600' : ''} onClick={() => setPop(pop === 'disc' ? null : 'disc')} active={pop === 'disc'} />
-        <TotalCell label={`VAT ${n(settings.vat_percent)}%`} value={tk(t.vat)} />
-        <TotalCell label="Round off" icon={Pencil} value={n(cart.roundOff) ? `− ${tk(cart.roundOff)}` : tk(0)} tone={n(cart.roundOff) ? 'text-slate-500' : ''} onClick={() => setPop(pop === 'round' ? null : 'round')} active={pop === 'round'} />
-        <div className="col-span-3 flex items-center justify-between gap-3 bg-gradient-to-br from-ocean-600 to-ocean-700 px-4 py-2.5 text-white sm:col-span-1 sm:rounded-br-2xl">
+      <div ref={popRef} className="relative grid grid-cols-3 border-t border-slate-200 dark:border-slate-800 sm:grid-cols-[repeat(5,minmax(0,1fr))_minmax(max-content,1.9fr)]">
+        <TotalCell label="Items" value={<>{num(t.qty)} <span className="text-xs font-semibold text-slate-500">pcs</span></>} />
+        <TotalCell label="Subtotal" value={tk(t.lines)} />
+        <TotalCell label="Discount" icon={Pencil} value={t.billDiscount > 0 ? `− ${tk(t.billDiscount)}` : tk(0)}
+          tone={t.billDiscount > 0 ? 'text-rose-600 dark:text-rose-400' : ''} onClick={() => setPop(pop === 'disc' ? null : 'disc')} active={pop === 'disc'} />
+        <TotalCell label={`VAT ${n(settings.vat_percent)}%`} icon={Pencil} value={tk(t.vat)} onClick={() => setPop(pop === 'vat' ? null : 'vat')} active={pop === 'vat'} />
+        <TotalCell label="Round off" value={n(cart.roundOff) ? `− ${tk(cart.roundOff)}` : tk(0)} tone={n(cart.roundOff) ? '!text-slate-500 dark:!text-slate-400' : ''} onClick={() => setPop(pop === 'round' ? null : 'round')} active={pop === 'round'} />
+        <div className="col-span-3 flex items-center justify-between gap-3 bg-gradient-to-br from-[#1a7cee] to-[#0b5cc0] px-4 py-2.5 text-white dark:from-[#1d6fd6] dark:to-[#134a95] sm:col-span-1">
           <div className="min-w-0">
-            <p className="whitespace-nowrap text-[10.5px] font-bold uppercase tracking-wider opacity-85">{cart.exchange ? (t.leftover > 0 ? 'Give back' : 'Customer pays') : 'Total payable'}</p>
-            {cart.exchange ? <p className="truncate text-[11px] opacity-80">New {tk(t.grand)} − returned {tk(t.credit)}</p>
-              : n(cart.customer?.balance) > 0 ? <p className="truncate text-[11px] opacity-80">+ old due {tk(cart.customer.balance)}</p> : null}
+            <p className="whitespace-nowrap text-[10.5px] font-bold uppercase tracking-[.08em] opacity-85">{cart.exchange ? (t.leftover > 0 ? 'Give back' : 'Customer pays') : 'Total payable'}</p>
+            {cart.exchange ? <p className="truncate text-[11px] opacity-85">New {tk(t.grand)} − returned {tk(t.credit)}</p>
+              : canRedeem && !n(cart.pointsRedeem) ? <p className="text-[11px] leading-tight opacity-85">Points value {tk(customerPoints * n(settings.loyalty_point_value || 1))}<br />available</p> : null}
           </div>
-          <p className="whitespace-nowrap text-[22px] font-extrabold tabular-nums leading-none tracking-tight 2xl:text-[26px]">{tk(cart.exchange && t.leftover > 0 ? t.leftover : t.net)}</p>
+          <p className="whitespace-nowrap text-[24px] font-extrabold tabular-nums leading-none tracking-[-.02em] 2xl:text-[28px]">{tk(cart.exchange && t.leftover > 0 ? t.leftover : t.net)}</p>
         </div>
 
         {pop === 'disc' && (
-          <div className="absolute bottom-full left-1/2 z-20 mb-2 w-72 -translate-x-1/2 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl animate-[bpPopUp_150ms_ease-out] dark:border-slate-700 dark:bg-slate-900 sm:left-[30%]">
+          <div className="absolute bottom-full left-[25%] z-20 mb-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl animate-[bpPopUp_150ms_ease-out] dark:border-slate-700 dark:bg-slate-900">
             <p className="mb-2 text-sm font-bold">Discount on this bill</p>
             <label className="block text-xs font-semibold text-slate-500">Bill discount (৳)
               <input className="input mt-1" inputMode="decimal" autoFocus value={cart.invoiceDiscount} onChange={(e) => dispatch({ type: 'field', key: 'invoiceDiscount', value: e.target.value.replace(/[^\d.]/g, '') })} placeholder="0" />
@@ -404,8 +430,15 @@ export default function POS() {
             {offers.bill && <p className="mt-1 text-xs text-emerald-600">{offers.bill.name}: − {tk(t.billOffer)}</p>}
           </div>
         )}
+        {pop === 'vat' && (
+          <div className="absolute bottom-full left-[38%] z-20 mb-2 w-64 rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-xl animate-[bpPopUp_150ms_ease-out] dark:border-slate-700 dark:bg-slate-900">
+            <p className="font-bold">VAT {n(settings.vat_percent)}%</p>
+            <p className="mt-1 text-xs text-slate-500">VAT is added on the bill after discounts. Change the rate in Shop Setup → Shop info.</p>
+            {role === 'admin' && <Link to="/settings" className="mt-2 inline-block text-xs font-bold text-ocean-600 hover:underline">Open Shop Setup →</Link>}
+          </div>
+        )}
         {pop === 'round' && (
-          <div className="absolute bottom-full left-1/2 z-20 mb-2 w-72 -translate-x-1/2 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl animate-[bpPopUp_150ms_ease-out] dark:border-slate-700 dark:bg-slate-900 sm:left-[62%]">
+          <div className="absolute bottom-full left-[52%] z-20 mb-2 w-72 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl animate-[bpPopUp_150ms_ease-out] dark:border-slate-700 dark:bg-slate-900">
             <p className="mb-2 text-sm font-bold">Waive loose change</p>
             <div className="flex flex-wrap gap-1.5">
               {[5, 10, 20, 50, 100].map((s) => <button type="button" key={s} className="chip" onClick={() => roundDown(s)}>Round to {s}</button>)}
@@ -419,58 +452,39 @@ export default function POS() {
     </section>
   );
 
-  const btn = 'inline-flex h-11 shrink-0 items-center gap-2 rounded-xl border px-3.5 text-[13px] font-bold transition disabled:opacity-40';
-  const plain = cls(btn, 'border-slate-200 bg-white text-slate-700 hover:border-ocean-300 hover:text-ocean-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200');
+  const act = 'inline-flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border px-3.5 text-[13px] font-bold transition disabled:opacity-40';
+  const plain = cls(act, 'border-slate-200 bg-white text-slate-700 hover:border-ocean-300 hover:text-ocean-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200');
   const empty = !cart.items.length;
+  const slot = typeof document !== 'undefined' ? toolbarSlot : null;
 
   return (
-    <div className="flex h-[calc(100vh-5.5rem)] flex-col gap-2.5">
-      {/* toolbar */}
-      <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
-        <Link to="/day-closing" title={shiftOn ? 'Your shift is open' : 'Open your shift in Day Closing'}
-          className={cls('inline-flex h-9 shrink-0 items-center gap-2 rounded-xl border px-3 text-[12.5px] font-semibold transition',
-            shiftOn ? 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-              : settings.shift_required === '1' ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300' : 'border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900')}>
-          <span className={cls('h-2 w-2 rounded-full', shiftOn ? 'bg-emerald-500 ring-4 ring-emerald-100 dark:ring-emerald-900/50' : 'bg-slate-300')} />
-          {shiftOn ? `Shift open · ${shiftOn.user_name || user?.name}` : 'No shift open — tap to open'}
-        </Link>
-        <span className="hidden h-9 shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-[12.5px] font-semibold tabular-nums text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 md:inline-flex"><CalendarDays className="h-4 w-4" />{dateText}</span>
-        <div className="flex-1" />
-        <button type="button" className={cls(plain, 'relative h-9')} onClick={() => setDrawer('held')}>
-          <PauseCircle className="h-4 w-4 text-amber-500" /><span className="hidden sm:inline">Held</span>
-          {held.data?.length > 0 && <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-rose-500 px-1 text-[10px] font-bold text-white dark:border-slate-900">{held.data.length}</span>}
-        </button>
-        <button type="button" className={cls(plain, 'h-9')} onClick={() => setDrawer('sales')}><History className="h-4 w-4 text-ocean-600" /><span className="hidden sm:inline">Recent</span></button>
-        {isManager && <button type="button" className={cls(plain, 'h-9', cart.exchange && 'border-amber-400 text-amber-700')} onClick={() => setExOpen(true)}><Repeat2 className="h-4 w-4 text-amber-600" /><span className="hidden sm:inline">Exchange</span></button>}
-        {isManager && <button type="button" className={cls(plain, 'h-9')} onClick={() => setExpOpen(true)}><Wallet className="h-4 w-4 text-rose-500" /><span className="hidden lg:inline">Expense</span></button>}
-        {shiftOn && <Link to="/day-closing" className={cls(plain, 'h-9')}><Coins className="h-4 w-4 text-emerald-600" /><span className="hidden lg:inline">Close shift</span></Link>}
-        <button type="button" className={cls(plain, 'h-9 px-2.5')} title={full ? 'Exit full screen' : 'Full screen'} aria-label="Full screen" onClick={toggleFull}>{full ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
-      </div>
+    <div className="flex h-[calc(100vh-60px)] flex-col">
+      {slot && createPortal(toolbar, slot)}
 
       {/* work area */}
-      <div className="grid min-h-0 flex-1 gap-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,34%)] 2xl:grid-cols-[minmax(0,1fr)_minmax(24rem,36%)]">
+      <div className="grid min-h-0 flex-1 gap-3.5 px-3 py-3 sm:px-[18px] sm:py-3.5 lg:grid-cols-[minmax(0,1fr)_min(36%,35rem)]">
         <div className="hidden min-h-0 lg:flex lg:flex-col">{cartCard}</div>
         <Catalog onAdd={add} cartQty={cartQty} offers={offersApi.data} priceMode={cart.priceMode} reloadKey={reloadKey} />
       </div>
 
       {/* action bar */}
-      <div className="card flex items-center gap-2 overflow-x-auto px-2.5 py-2 [scrollbar-width:none]">
-        <button type="button" className={cls(btn, 'border-rose-200 bg-white text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:bg-slate-900 dark:hover:bg-rose-900/20')} disabled={empty && !cart.customer} onClick={clearCart}><X className="h-4 w-4" /> Cancel</button>
-        <span className="mx-0.5 h-7 w-px shrink-0 bg-slate-200 dark:bg-slate-700" />
-        <button type="button" className={plain} disabled={empty} onClick={hold}><PauseCircle className="h-4 w-4 text-amber-500" /> Hold <Kbd>F4</Kbd></button>
-        <button type="button" className={plain} disabled={empty || Boolean(cart.exchange)} onClick={() => setQuoteOpen(true)}><FileText className="h-4 w-4 text-violet-500" /> Quotation</button>
-        <button type="button" className={plain} disabled={empty} onClick={() => openPay('credit')}><NotebookPen className="h-4 w-4 text-rose-500" /> Credit sale <Kbd>F6</Kbd></button>
-        {isManager && <Link to="/sales-return" className={plain} title="Sales return"><Undo2 className="h-4 w-4 text-slate-500" /><span className="hidden 2xl:inline">Return</span></Link>}
+      <footer className="flex h-16 shrink-0 items-center gap-2 overflow-x-auto border-t border-slate-200 bg-white px-3 [scrollbar-width:none] dark:border-slate-800 dark:bg-slate-900 sm:px-[18px]">
+        <button type="button" className={cls(act, 'border-rose-300/70 bg-white text-rose-600 hover:bg-rose-50 dark:border-rose-900/70 dark:bg-slate-900 dark:text-rose-400 dark:hover:bg-rose-900/20')} disabled={empty && !cart.customer} onClick={clearCart}><X className="h-[15px] w-[15px]" /> Cancel <Kbd>Esc</Kbd></button>
+        <span className="mx-1 h-[30px] w-px shrink-0 bg-slate-200 dark:bg-slate-700" />
+        <button type="button" className={plain} disabled={empty} onClick={hold}><Pause className="h-[15px] w-[15px]" /> Hold <Kbd>F4</Kbd></button>
+        <button type="button" className={plain} disabled={empty || Boolean(cart.exchange)} onClick={() => setQuoteOpen(true)}><FileText className="h-[15px] w-[15px]" /> Quotation</button>
+        <button type="button" className={plain} disabled={empty} onClick={() => openPay('credit')}><BookOpen className="h-[15px] w-[15px]" /> Credit sale <Kbd>F6</Kbd></button>
+        {isManager && <Link to="/sales-return" className={plain} title="Sales return"><Undo2 className="h-[15px] w-[15px]" /> Return</Link>}
         <div className="min-w-2 flex-1" />
-        <button type="button" className={cls(btn, 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-slate-200 dark:bg-slate-100 dark:text-slate-900')} disabled={empty} onClick={() => openPay('pay')}><Layers className="h-4 w-4" /> Split<span className="hidden xl:inline"> / bKash</span> <Kbd light className="dark:border-slate-400 dark:bg-transparent dark:text-slate-600">F7</Kbd></button>
-        <button type="button" className={cls(btn, 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700')} disabled={empty || busy} onClick={quickCash}><Banknote className="h-4 w-4" /> Cash <Kbd light>F9</Kbd></button>
-        <button type="button" className={cls(btn, 'h-12 border-0 bg-gradient-to-br from-ocean-600 to-ocean-700 px-5 text-[14px] text-white shadow-[0_10px_22px_-12px_rgb(26_124_238/.9)] hover:brightness-110')} disabled={empty} onClick={() => openPay('pay')}>
-          <Printer className="h-4 w-4" /> Pay {tk(cart.exchange && t.leftover > 0 ? 0 : t.net)} <Kbd light>F10</Kbd>
+        <button type="button" className={cls(act, 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-slate-200 dark:bg-slate-200 dark:text-slate-900')} disabled={empty} onClick={() => openPay('pay')}><Layers className="h-[15px] w-[15px]" /> Split / bKash <Kbd className="!border-white/30 !bg-transparent !text-white/70 dark:!border-slate-500 dark:!text-slate-600">F7</Kbd></button>
+        <button type="button" className={cls(act, 'h-[46px] border-0 bg-emerald-600 px-[18px] text-white hover:bg-emerald-700')} disabled={empty || busy} onClick={quickCash}><Banknote className="h-[15px] w-[15px]" /> Cash <Kbd light>F9</Kbd></button>
+        <button type="button" className={cls(act, 'h-[46px] border-0 bg-gradient-to-br from-[#1a7cee] to-[#0b5cc0] px-[22px] text-white hover:brightness-110')} disabled={empty} onClick={() => openPay('pay')}>
+          <Printer className="h-[15px] w-[15px]" /> Pay &amp; Print {tk(cart.exchange && t.leftover > 0 ? 0 : t.net)} <Kbd light>F10</Kbd>
         </button>
-      </div>
+      </footer>
 
       {/* phones / portrait tablets: cart sheet */}
-      <button type="button" onClick={() => setSheet(true)} className="fixed bottom-24 right-4 z-30 flex items-center gap-2 rounded-2xl bg-ocean-600 px-5 py-3.5 font-bold text-white shadow-pop lg:hidden">
+      <button type="button" onClick={() => setSheet(true)} className="fixed bottom-20 right-4 z-30 flex items-center gap-2 rounded-2xl bg-ocean-600 px-5 py-3.5 font-bold text-white shadow-pop lg:hidden">
         <ShoppingCart className="h-5 w-5" /> {num(t.qty)} · {tk(t.net)} <ChevronUp className="h-4 w-4" />
       </button>
       <div className={cls('fixed inset-0 z-40 bg-slate-900/40 transition-opacity duration-300 lg:hidden', sheet ? 'opacity-100' : 'pointer-events-none opacity-0')} onClick={() => setSheet(false)} />
@@ -478,14 +492,14 @@ export default function POS() {
         <div className="flex items-center justify-between px-2 pb-2"><b>Cart</b><button type="button" aria-label="Close cart" onClick={() => setSheet(false)}><X className="h-5 w-5" /></button></div>
         {sheet && <div className="flex min-h-0 flex-1 flex-col">{cartCard}</div>}
         <div className="grid grid-cols-2 gap-2 pt-2">
-          <button type="button" className="btn-secondary h-12" disabled={empty} onClick={() => { setSheet(false); openPay('credit'); }}><NotebookPen className="h-4 w-4" /> Credit</button>
+          <button type="button" className="btn-secondary h-12" disabled={empty} onClick={() => { setSheet(false); openPay('credit'); }}><BookOpen className="h-4 w-4" /> Credit</button>
           <button type="button" className="btn-primary h-12" disabled={empty} onClick={() => { setSheet(false); openPay('pay'); }}><Printer className="h-4 w-4" /> Pay {tk(t.net)}</button>
         </div>
       </div>
 
       <PaymentModal open={Boolean(payMode)} mode={payMode} onClose={() => setPayMode(null)} t={t} cart={cart} accList={accList}
         payments={payments} setPayments={setPayments} dueDate={dueDate} setDueDate={setDueDate} busy={busy} onComplete={complete}
-        sendSms={sendSms} setSendSms={setSendSms} settings={settings} />
+        sendSms={sendSms} setSendSms={setSendSms} print={print} setPrint={setPrint} onNote={(v) => dispatch({ type: 'field', key: 'note', value: v })} settings={settings} />
 
       <RecentDrawer open={Boolean(drawer)} initialTab={drawer || 'sales'} onClose={() => setDrawer(null)} onPrintSale={printOld} onRetrieve={retrieve}
         onPrintQuotation={printQuotation} shift={shiftOn} heldCount={held.data?.length || 0} quoteReload={quoteKey} />
@@ -521,6 +535,42 @@ export default function POS() {
         }} />
 
       <div className="print-area hidden print:block"><Receipt sale={printSale} /></div>
+    </div>
+  );
+}
+
+/** Customer box: rich card (initials, name, phone, old due, points) or a search field for walk-in. */
+function CustomerBox({ customer, onChange, onAdd, loyalty }) {
+  const [editing, setEditing] = useState(false);
+  const wrap = useRef(null);
+  const named = customer && !customer.is_walk_in;
+  const initials = named ? customer.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() : '';
+  const show = named && !editing;
+  return (
+    <div ref={wrap} className="relative"
+      onFocusCapture={() => setEditing(true)}
+      onBlurCapture={() => setTimeout(() => { if (wrap.current && !wrap.current.contains(document.activeElement)) setEditing(false); }, 150)}>
+      <div className="[&_input]:h-11 [&_input]:rounded-xl [&_input]:pr-12 [&_input]:text-[13.5px]">
+        <PartyPicker type="customer" value={customer} onChange={(c) => { onChange(c); setEditing(false); }} placeholder="Walk-in customer — search name or phone…" allowClear={false} />
+      </div>
+      {show && (
+        <button type="button" onClick={() => wrap.current?.querySelector('input')?.focus()}
+          className="group absolute inset-0 flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white pl-3 pr-12 text-left dark:border-slate-700 dark:bg-slate-900" title="Change customer">
+          <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-violet-50 text-xs font-bold text-violet-600 dark:bg-violet-900/40 dark:text-violet-300">{initials}</span>
+          <span className="min-w-0 flex-1">
+            <b className="block truncate text-[13.5px] leading-tight text-slate-900 dark:text-white">{customer.name}</b>
+            <span className="block truncate text-[11.5px] text-slate-500 dark:text-slate-400">{[customer.phone, customer.area].filter(Boolean).join(' · ')}</span>
+          </span>
+          {n(customer.balance) > 0 && <span className="inline-flex h-[22px] shrink-0 items-center rounded-full bg-rose-50 px-2 text-[11px] font-bold text-rose-600 dark:bg-rose-900/30 dark:text-rose-300">Due {tk(customer.balance)}</span>}
+          {loyalty && <span className="hidden h-[22px] shrink-0 items-center rounded-full bg-violet-50 px-2 text-[11px] font-bold text-violet-600 dark:bg-violet-900/30 dark:text-violet-300 2xl:inline-flex">{num(customer.loyalty_points || 0)} pts</span>}
+          <span role="button" tabIndex={-1} aria-label="Remove customer" title="Back to walk-in" onClick={(e) => { e.stopPropagation(); onChange(null); }}
+            className="shrink-0 rounded-md p-1 text-slate-400 opacity-0 transition hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:hover:bg-rose-900/30"><X className="h-3.5 w-3.5" /></span>
+        </button>
+      )}
+      <button type="button" onClick={onAdd} aria-label="Add a new customer" title="Add a new customer"
+        className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-[9px] bg-ocean-50 text-ocean-600 transition hover:bg-ocean-100 dark:bg-ocean-900/40 dark:text-ocean-300">
+        <UserPlus className="h-[15px] w-[15px]" />
+      </button>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { cls } from '../../utils/format';
 /** Keyboard shortcut hint, e.g. <Kbd>F9</Kbd> */
 export function Kbd({ children, light = false, className = '' }) {
   return (
-    <kbd className={cls('hidden rounded-[5px] border border-b-2 px-1 font-sans text-[10px] font-bold leading-[15px] 2xl:inline-block',
+    <kbd className={cls('hidden rounded-[5px] border border-b-2 px-1 font-sans text-[10px] font-bold leading-[15px] xl:inline-block',
       light ? 'border-white/30 bg-white/15 text-white' : 'border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400', className)}>
       {children}
     </kbd>

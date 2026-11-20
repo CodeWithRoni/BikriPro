@@ -11,6 +11,10 @@ import { toggleTheme, setMobileNav, loggedOut, settingsLoaded } from '../../stor
 import { cls, tk } from '../../utils/format';
 import { Modal, Field } from '../ui';
 
+/** POS top bar: pill and square-button styles (shared with the POS page toolbar). */
+export const POS_PILL = 'inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-slate-200 bg-slate-50 px-3 text-[12.5px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-200';
+export const POS_BTN = 'inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-[7px] whitespace-nowrap rounded-[10px] border border-slate-200 bg-white px-[11px] text-[12.5px] font-semibold text-slate-700 transition hover:border-ocean-300 hover:text-ocean-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200';
+
 export default function AppLayout() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -60,11 +64,82 @@ export default function AppLayout() {
   const branchName = branches?.data.find((b) => Number(b.id) === Number(branches.current))?.name;
   const isPos = pathname.startsWith('/pos');
 
+  const bellPanel = (
+              <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                <p className="border-b border-slate-100 px-4 py-3 text-sm font-bold dark:border-slate-800">Notifications</p>
+                <div className="max-h-[26rem] overflow-y-auto">
+                  {alerts.notes.length === 0 && alerts.due.length === 0 && alerts.birthdays.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">All caught up 🎉</p>}
+                  {alerts.notes.map((n, i) => {
+                    const I = { critical: AlertOctagon, warning: AlertTriangle, good: Sparkles, info: Info }[n.level];
+                    const tone = { critical: 'text-rose-600', warning: 'text-amber-600', good: 'text-emerald-600', info: 'text-ocean-600' }[n.level];
+                    return (
+                      <button type="button" key={`${n.type}-${i}`} onClick={() => { setBell(false); if (n.link) navigate(n.link); }} className="flex w-full items-start gap-2.5 px-4 py-2.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
+                        <I className={cls('mt-0.5 h-4 w-4 shrink-0', tone)} />
+                        <span className="min-w-0"><span className="block font-semibold">{n.title}</span>{n.text && <span className="text-xs text-slate-500">{n.text}</span>}</span>
+                      </button>
+                    );
+                  })}
+                  {alerts.due.length > 0 && <p className="border-t border-slate-100 px-4 pb-1 pt-2.5 text-xs font-bold uppercase tracking-wide text-slate-400 dark:border-slate-800">Due collection</p>}
+                  {alerts.due.map((d) => (
+                    <button type="button" key={d.customer_id} onClick={() => { setBell(false); navigate(`/collection?customer=${d.customer_id}`); }} className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
+                      <span className="min-w-0"><span className="block truncate font-semibold">{d.name}</span><span className="text-xs text-slate-500">{d.days_overdue > 0 ? `${d.days_overdue} day(s) overdue` : 'Due today'} · {d.phone}</span></span>
+                      <span className="shrink-0 font-bold text-rose-600">{tk(d.due_amount)}</span>
+                    </button>
+                  ))}
+                  {alerts.birthdays.map((b) => (
+                    <div key={b.id} className="flex items-center gap-2 px-4 py-2.5 text-sm"><Cake className="h-4 w-4 text-pink-500" /> <b>{b.name}</b> has a birthday today</div>
+                  ))}
+                </div>
+              </div>
+  );
+  const userMenu = (
+              <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                <button type="button" onClick={() => { setMenu(false); setPwOpen(true); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"><KeyRound className="h-4 w-4" /> Change password</button>
+                <button type="button" onClick={logout} className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20"><LogOut className="h-4 w-4" /> Log out</button>
+              </div>
+  );
+
   return (
     <div className="min-h-full">
       <Sidebar />
-      <div className={cls('flex min-h-screen flex-col transition-all duration-300 ease-in-out', collapsed ? 'lg:pl-[4.75rem]' : 'lg:pl-64')}>
+      <div className={cls('flex min-h-screen flex-col transition-all duration-300 ease-in-out', collapsed || isPos ? 'lg:pl-[4.75rem]' : 'lg:pl-64')}>
         {/* Top bar */}
+        {isPos ? (
+          <header className="no-print sticky top-0 z-20 flex h-[60px] items-center gap-2.5 border-b border-slate-200/80 bg-white px-3 dark:border-slate-800 dark:bg-slate-900 sm:px-[18px]">
+            <button type="button" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 lg:hidden" onClick={() => dispatch(setMobileNav(true))} aria-label="Open menu">
+              <Menu className="h-5 w-5" />
+            </button>
+            <h2 className="hidden whitespace-nowrap text-base font-bold text-slate-900 dark:text-white sm:block">Point of Sale</h2>
+            {multiBranch && user?.role === 'admin' ? (
+              <div className="hidden w-44 md:block">
+                <Select className="h-8 rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-0 text-[12.5px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" aria-label="Branch" value={branchValue} onChange={(e) => switchBranch(e.target.value)}>
+                  {branches.data.filter((b) => b.is_active).map((b) => <option key={b.id} value={String(b.id)} data-icon={Store}>{b.name}</option>)}
+                  <option value="all" data-icon={Store}>All branches</option>
+                </Select>
+              </div>
+            ) : branchName && <span className={cls(POS_PILL, 'hidden md:inline-flex')}><Store className="h-[15px] w-[15px]" /> {branchName}</span>}
+            <div id="pos-toolbar" className="flex min-w-0 flex-1 items-center gap-2.5" />
+            <div className="flex shrink-0 items-center gap-2.5" ref={menuRef}>
+              <button type="button" onClick={() => dispatch(toggleTheme())} className={cls(POS_BTN, 'hidden sm:inline-flex')} aria-label="Toggle theme" title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
+                {theme === 'dark' ? <Sun className="h-[15px] w-[15px]" /> : <Moon className="h-[15px] w-[15px]" />}
+              </button>
+              <div className="relative">
+                <button type="button" onClick={() => { setBell(!bell); setMenu(false); }} className={cls(POS_BTN, 'relative')} aria-label="Notifications">
+                  <Bell className="h-[15px] w-[15px]" />
+                  {alertCount > 0 && <span className="absolute -right-1.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-rose-600 px-1 text-[10.5px] font-bold text-white dark:border-slate-900">{alertCount}</span>}
+                </button>
+                {bell && bellPanel}
+              </div>
+              <div className="relative">
+                <button type="button" onClick={() => { setMenu(!menu); setBell(false); }} title={`${user?.name} (${user?.role})`} aria-label="Account menu"
+                  className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-ocean-600 text-sm font-bold text-white transition hover:brightness-110">
+                  {user?.name?.[0]?.toUpperCase()}
+                </button>
+                {menu && userMenu}
+              </div>
+            </div>
+          </header>
+        ) : (
         <header className="no-print sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/85 sm:px-6">
           <button type="button" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 lg:hidden" onClick={() => dispatch(setMobileNav(true))} aria-label="Open menu">
             <Menu className="h-5 w-5" />
@@ -82,34 +157,7 @@ export default function AppLayout() {
                 <Bell className="h-5 w-5" />
                 {alertCount > 0 && <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">{alertCount}</span>}
               </button>
-              {bell && (
-                <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                  <p className="border-b border-slate-100 px-4 py-3 text-sm font-bold dark:border-slate-800">Notifications</p>
-                  <div className="max-h-[26rem] overflow-y-auto">
-                    {alerts.notes.length === 0 && alerts.due.length === 0 && alerts.birthdays.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">All caught up 🎉</p>}
-                    {alerts.notes.map((n, i) => {
-                      const I = { critical: AlertOctagon, warning: AlertTriangle, good: Sparkles, info: Info }[n.level];
-                      const tone = { critical: 'text-rose-600', warning: 'text-amber-600', good: 'text-emerald-600', info: 'text-ocean-600' }[n.level];
-                      return (
-                        <button type="button" key={`${n.type}-${i}`} onClick={() => { setBell(false); if (n.link) navigate(n.link); }} className="flex w-full items-start gap-2.5 px-4 py-2.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
-                          <I className={cls('mt-0.5 h-4 w-4 shrink-0', tone)} />
-                          <span className="min-w-0"><span className="block font-semibold">{n.title}</span>{n.text && <span className="text-xs text-slate-500">{n.text}</span>}</span>
-                        </button>
-                      );
-                    })}
-                    {alerts.due.length > 0 && <p className="border-t border-slate-100 px-4 pb-1 pt-2.5 text-xs font-bold uppercase tracking-wide text-slate-400 dark:border-slate-800">Due collection</p>}
-                    {alerts.due.map((d) => (
-                      <button type="button" key={d.customer_id} onClick={() => { setBell(false); navigate(`/collection?customer=${d.customer_id}`); }} className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
-                        <span className="min-w-0"><span className="block truncate font-semibold">{d.name}</span><span className="text-xs text-slate-500">{d.days_overdue > 0 ? `${d.days_overdue} day(s) overdue` : 'Due today'} · {d.phone}</span></span>
-                        <span className="shrink-0 font-bold text-rose-600">{tk(d.due_amount)}</span>
-                      </button>
-                    ))}
-                    {alerts.birthdays.map((b) => (
-                      <div key={b.id} className="flex items-center gap-2 px-4 py-2.5 text-sm"><Cake className="h-4 w-4 text-pink-500" /> <b>{b.name}</b> has a birthday today</div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {bell && bellPanel}
             </div>
             <button type="button" onClick={() => dispatch(toggleTheme())} className="rounded-xl p-2.5 text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" aria-label="Toggle theme" title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
               {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
@@ -120,16 +168,12 @@ export default function AppLayout() {
                 <span className="hidden text-left sm:block"><span className="block text-sm font-semibold leading-tight">{user?.name}</span><span className="block text-[11px] capitalize text-slate-500">{user?.role}</span></span>
                 <ChevronDown className="h-4 w-4 text-slate-400" />
               </button>
-              {menu && (
-                <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                  <button type="button" onClick={() => { setMenu(false); setPwOpen(true); }} className="flex w-full items-center gap-2 px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"><KeyRound className="h-4 w-4" /> Change password</button>
-                  <button type="button" onClick={logout} className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20"><LogOut className="h-4 w-4" /> Log out</button>
-                </div>
-              )}
+              {menu && userMenu}
             </div>
           </div>
         </header>
-        <main className={cls('flex-1', isPos ? 'p-2 sm:p-3' : 'p-4 sm:p-6')}>
+        )}
+        <main className={cls('flex-1', isPos ? 'p-0' : 'p-4 sm:p-6')}>
           <Outlet />
         </main>
       </div>

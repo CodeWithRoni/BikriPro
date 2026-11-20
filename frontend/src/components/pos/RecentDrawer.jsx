@@ -35,8 +35,8 @@ export default function RecentDrawer({ open, onClose, initialTab = 'sales', onPr
   };
 
   const Item = ({ icon: Icon, tone, title, sub, amount, badge, badgeTone, children }) => (
-    <div className="group flex items-center gap-3 border-b border-slate-100 px-5 py-3 dark:border-slate-800">
-      <span className={cls('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', tone)}><Icon className="h-[18px] w-[18px]" /></span>
+    <div className="group relative flex items-center gap-3 border-b border-slate-100 px-5 py-[13px] dark:border-slate-800/70">
+      <span className={cls('flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[11px]', tone)}><Icon className="h-[15px] w-[15px]" /></span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13.5px] font-bold">{title}</p>
         <p className="truncate text-[11.5px] text-slate-500">{sub}</p>
@@ -45,7 +45,11 @@ export default function RecentDrawer({ open, onClose, initialTab = 'sales', onPr
         <b className="block text-[13.5px] tabular-nums">{amount}</b>
         {badge && <span className={cls('mt-0.5 inline-block rounded-full px-2 py-px text-[10.5px] font-bold', badgeTone)}>{badge}</span>}
       </div>
-      {children && <div className="flex shrink-0 gap-1">{children}</div>}
+      {children && (
+        <div className="absolute right-4 top-1/2 flex -translate-y-1/2 gap-1 rounded-xl border border-slate-200 bg-white p-1 opacity-0 shadow-lg transition group-hover:opacity-100 focus-within:opacity-100 dark:border-slate-700 dark:bg-slate-800">
+          {children}
+        </div>
+      )}
     </div>
   );
   const iconBtn = 'rounded-lg p-2 text-slate-400 transition hover:bg-ocean-50 hover:text-ocean-600 dark:hover:bg-slate-800';
@@ -58,7 +62,7 @@ export default function RecentDrawer({ open, onClose, initialTab = 'sales', onPr
         <div className="border-b border-slate-200 px-5 pb-3 pt-4 dark:border-slate-800">
           <div className="mb-3 flex items-center gap-2">
             <History className="h-5 w-5 text-ocean-600" />
-            <h2 className="flex-1 text-[17px] font-bold">Recent transactions</h2>
+            <h2 className="flex-1 text-[17px] font-bold text-slate-900 dark:text-white">Recent transactions</h2>
             <button type="button" aria-label="Close" className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800" onClick={onClose}><X className="h-4 w-4" /></button>
           </div>
           <div className="flex gap-0.5 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
@@ -84,7 +88,7 @@ export default function RecentDrawer({ open, onClose, initialTab = 'sales', onPr
             return (
               <Item key={s.id} icon={ex ? Repeat2 : ReceiptIcon}
                 tone={ex ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30' : due ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/30' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30'}
-                title={s.invoice_no} sub={`${s.customer_name || 'Walk-in'} · ${num(s.item_count)} items · ${ago(s.sale_date)}`} amount={tk(s.grand_total)}
+                title={s.invoice_no} sub={[s.customer_name || 'Walk-in', ex ? 'Exchange' : Number(s.paid_amount) <= 0 && due ? 'Credit sale' : s.pay_methods, `${num(s.item_count)} item${Number(s.item_count) === 1 ? '' : 's'}`, ago(s.sale_date)].filter(Boolean).join(' · ')} amount={tk(s.grand_total)}
                 badge={s.status === 'returned' ? 'Returned' : ex ? 'Exchange' : due ? `Due ${tk(s.due_amount)}` : 'Paid'}
                 badgeTone={s.status === 'returned' ? 'bg-slate-100 text-slate-500 dark:bg-slate-800' : ex ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' : due ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'}>
                 <button type="button" title="Print receipt" aria-label="Print receipt" className={iconBtn} onClick={() => onPrintSale(s.id)}><Printer className="h-4 w-4" /></button>
@@ -114,7 +118,7 @@ export default function RecentDrawer({ open, onClose, initialTab = 'sales', onPr
         <div className="grid grid-cols-3 gap-2 border-t border-slate-200 p-4 dark:border-slate-800">
           <Stat label="Today" value={tk(todaySum.data?.summary?.amount || 0)} />
           <Stat label="Bills" value={num(todaySum.data?.summary?.total || 0)} />
-          <Stat label={shift ? 'Cash in drawer' : 'Shift'} value={shift ? tk(shift.expected_cash) : 'Not open'} />
+          <Stat label="Cash in drawer" value={shift ? tk(shift.expected_cash) : 'No shift'} />
         </div>
       </aside>
     </>

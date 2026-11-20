@@ -1,52 +1,116 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Layers, Flame, Heart, Clock, BadgePercent, LayoutGrid, Tag, Ruler, Star, Package, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Layers, Flame, Heart, Tag, LayoutGrid, X, Star, Package, Check } from 'lucide-react';
 import api, { fileUrl } from '../../api/client';
 import useApi from '../../hooks/useApi';
-import Select from '../ui/Select';
 import { Spinner } from '../ui';
 import { inScope } from '../../utils/offers';
 import { tk, num, cls } from '../../utils/format';
 
-const TABS = [['all', 'All', Layers], ['best', 'Best selling', Flame], ['recent', 'Recent', Clock], ['fav', 'Favourites', Heart], ['offer', 'On offer', BadgePercent]];
+const TABS = [['all', 'All products', Layers], ['best', 'Best selling', Flame], ['fav', 'Favourites', Heart], ['offer', 'On offer', Tag]];
 const PAGE = 48;
+
+/** "Eid Offer 15% off" → "Eid −15%", buy 2 get 1 → "2+1 free" */
+export function offerBadge(o) {
+  if (!o) return '';
+  const word = String(o.name || '').trim().split(/\s+/)[0] || 'Offer';
+  if (o.type === 'percent') return `${word} −${Number(o.value)}%`;
+  if (o.type === 'amount') return `${word} −৳${Number(o.value)}`;
+  if (o.type === 'bogo') return `${o.buy_qty}+${o.get_qty} free`;
+  return word;
+}
+
+/** Filter box: icon · label · value chip · clear — opens a small list. */
+function FilterBox({ icon: Icon, label, value, placeholder, options, onChange, className }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+  const current = options.find((o) => String(o.value) === String(value));
+  return (
+    <div ref={ref} className={cls('relative min-w-0', className)}>
+      <button type="button" onClick={() => setOpen(!open)} aria-haspopup="listbox" aria-expanded={open}
+        className={cls('flex h-9 w-full items-center gap-2 rounded-[10px] border bg-white px-2.5 text-[12.5px] font-semibold text-slate-700 transition dark:bg-slate-900 dark:text-slate-200',
+          open ? 'border-ocean-400 ring-4 ring-ocean-100 dark:ring-ocean-900/40' : 'border-slate-200 hover:border-ocean-300 dark:border-slate-700')}>
+        {Icon && <Icon className="h-[15px] w-[15px] shrink-0 text-slate-500" />}
+        <span className="shrink-0">{label}</span>
+        <span className={cls(!value ? 'hidden sm:inline-flex ml-1' : 'ml-1 inline-flex', 'sm:inline-flex h-5 min-w-0 items-center truncate rounded-full px-2 text-[11px] font-bold',
+          current ? 'bg-ocean-50 text-ocean-700 dark:bg-ocean-900/40 dark:text-ocean-200' : 'border border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800')}>
+          <span className="truncate">{current ? current.label : placeholder}</span>
+        </span>
+        {current && (
+          <span role="button" tabIndex={-1} aria-label={`Clear ${label}`} onClick={(e) => { e.stopPropagation(); onChange(''); }} className="ml-auto shrink-0 rounded p-0.5 text-slate-400 hover:text-rose-500">
+            <X className="h-[15px] w-[15px]" />
+          </span>
+        )}
+      </button>
+      {open && (
+        <div role="listbox" className="absolute left-0 z-30 mt-1 max-h-72 w-full min-w-[12rem] overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl animate-[bpPop_150ms_ease-out] dark:border-slate-700 dark:bg-slate-900">
+          <button type="button" onClick={() => { onChange(''); setOpen(false); }} className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] hover:bg-ocean-50 dark:hover:bg-slate-800">
+            {placeholder}{!current && <Check className="h-4 w-4 text-ocean-600" />}
+          </button>
+          {options.map((o) => (
+            <button type="button" key={o.value} onClick={() => { onChange(String(o.value)); setOpen(false); }}
+              className={cls('flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13px] hover:bg-ocean-50 dark:hover:bg-slate-800', o.sub && 'pl-6 text-slate-600 dark:text-slate-300')}>
+              <span className="truncate">{o.label}</span>{String(o.value) === String(value) && <Check className="h-4 w-4 shrink-0 text-ocean-600" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Right-hand product browser: tabs, category / brand / size filters, category pills, product cards. */
 export default function Catalog({ onAdd, cartQty, offers, priceMode, reloadKey }) {
-  const [tab, setTab] = useState(() => localStorage.getItem('bp_pos_tab') || 'all');
-  const [cat, setCat] = useState('');
+  const [tab, setTab] = useState(() => { const t = localStorage.getItem('bp_pos_tab'); return TABS.some(([k]) => k === t) ? t : 'all'; });
+  const [cat, setCat] = useState('');   // Category box (main or sub category)
+  const [pill, setPill] = useState(''); // pill under it (a sub-category of the box's category)
   const [brand, setBrand] = useState('');
   const [size, setSize] = useState('');
   const [limit, setLimit] = useState(PAGE);
   useEffect(() => { try { localStorage.setItem('bp_pos_tab', tab); } catch { /* ignore */ } }, [tab]);
-  useEffect(() => setLimit(PAGE), [tab, cat, brand, size]);
+  useEffect(() => setLimit(PAGE), [tab, cat, pill, brand, size]);
+  useEffect(() => setPill(''), [cat]);
 
   const cats = useApi('/categories');
   const brands = useApi('/brands');
   const facets = useApi('/products/facets');
-  const grid = useApi(['best', 'recent', 'fav'].includes(tab) ? '/products/pos-grid' : null, { k: reloadKey });
+  const totals = useApi('/products', { limit: 1, k: reloadKey });
+  const grid = useApi(['best', 'fav'].includes(tab) ? '/products/pos-grid' : null, { k: reloadKey });
   const list = useApi(['all', 'offer'].includes(tab) ? '/products' : null, {
-    category_id: cat || undefined, brand_id: brand || undefined, size: size || undefined, sort: 'name', limit: tab === 'offer' ? 300 : limit, k: reloadKey,
+    category_id: pill || cat || undefined, brand_id: brand || undefined, size: size || undefined, sort: 'name', limit: tab === 'offer' ? 300 : limit, k: reloadKey,
   });
 
-  const catList = cats.data?.data || cats.data || [];
+  const catList = Array.isArray(cats.data) ? cats.data : cats.data?.data || [];
+  const brandList = Array.isArray(brands.data) ? brands.data : brands.data?.data || [];
   const mains = catList.filter((c) => !c.parent_id);
-  const countOf = (c) => Number(c.product_count || 0) + catList.filter((s) => Number(s.parent_id) === Number(c.id)).reduce((t, s) => t + Number(s.product_count || 0), 0);
-  const inCat = (p) => !cat || Number(p.category_id) === Number(cat) || catList.some((s) => Number(s.id) === Number(p.category_id) && Number(s.parent_id) === Number(cat));
+  const subsOf = (id) => catList.filter((s) => Number(s.parent_id) === Number(id));
+  const countOf = (c) => Number(c.product_count || 0) + subsOf(c.id).reduce((t, s) => t + Number(s.product_count || 0), 0);
+  const active = pill || cat;
+  const inCat = (p) => !active || Number(p.category_id) === Number(active) || subsOf(active).some((s) => Number(s.id) === Number(p.category_id));
+  const catOptions = mains.flatMap((c) => [{ value: c.id, label: c.name }, ...subsOf(c.id).map((s) => ({ value: s.id, label: s.name, sub: true }))]);
+  // pills: the sub-categories of the chosen category, or the main categories when none is chosen
+  const pillParent = cat && subsOf(cat).length ? catList.find((c) => Number(c.id) === Number(cat)) : null;
+  const pillCats = pillParent ? subsOf(cat) : mains;
+  const pickPill = (id) => (pillParent ? setPill(id) : setCat(id));
 
   const items = useMemo(() => {
     let rows;
     if (tab === 'all' || tab === 'offer') rows = list.data?.data || [];
-    else rows = (grid.data?.[{ best: 'best_selling', recent: 'recent', fav: 'favorite' }[tab]] || [])
+    else rows = (grid.data?.[tab === 'best' ? 'best_selling' : 'favorite'] || [])
       .filter((p) => inCat(p) && (!brand || Number(p.brand_id) === Number(brand)) && (!size || p.size === size));
     if (tab === 'offer') rows = rows.filter((p) => (offers || []).some((o) => !String(o.type).startsWith('bill') && inScope(o, p)));
     return rows;
-  }, [tab, list.data, grid.data, cat, brand, size, offers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tab, list.data, grid.data, cat, pill, brand, size, offers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const offerFor = (p) => (offers || []).find((o) => !String(o.type).startsWith('bill') && inScope(o, p));
-  const offerBadge = (o) => (o.type === 'percent' ? `−${Number(o.value)}%` : o.type === 'amount' ? `−৳${Number(o.value)}` : o.type === 'bogo' ? `${o.buy_qty}+${o.get_qty} free` : '');
   const loading = (tab === 'all' || tab === 'offer') ? list.loading && !list.data : grid.loading && !grid.data;
-  const more = (tab === 'all') && list.data && list.data.total > items.length;
-  const filtered = cat || brand || size;
+  const more = tab === 'all' && list.data && list.data.total > items.length;
+  const filtered = cat || pill || brand || size;
   const [favs, setFavs] = useState({});
   const toggleFav = async (e, p) => {
     e.stopPropagation();
@@ -55,41 +119,31 @@ export default function Catalog({ onAdd, cartQty, offers, priceMode, reloadKey }
   };
 
   return (
-    <section className="card flex min-h-0 flex-col overflow-hidden">
+    <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgb(15_23_42/.05),0_1px_3px_rgb(15_23_42/.04)] dark:border-slate-800 dark:bg-slate-900">
       {/* tabs */}
       <div className="flex gap-1 overflow-x-auto px-3 pt-3 [scrollbar-width:none]">
         {TABS.map(([k, l, Icon]) => (
           <button type="button" key={k} onClick={() => setTab(k)}
-            className={cls('inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold transition',
-              tab === k ? 'bg-ocean-50 text-ocean-700 dark:bg-ocean-900/40 dark:text-ocean-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200')}>
-            <Icon className="h-4 w-4" />{l}
+            className={cls('inline-flex h-[34px] shrink-0 items-center gap-[7px] rounded-[10px] px-3 text-[12.5px] font-semibold transition',
+              tab === k ? 'bg-ocean-50 text-ocean-700 dark:bg-ocean-900/40 dark:text-ocean-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200')}>
+            <Icon className="h-[15px] w-[15px]" />{l}
           </button>
         ))}
       </div>
 
       {/* filters */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-2 px-3 pt-2.5">
-        <Select className="input h-9 py-1 text-[12.5px]" value={cat} onChange={(e) => setCat(e.target.value)} aria-label="Category">
-          <option value="" data-icon={LayoutGrid}>All categories</option>
-          {mains.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
-          {catList.filter((c) => c.parent_id).map((c) => <option key={c.id} value={String(c.id)}>{c.parent_name} › {c.name}</option>)}
-        </Select>
-        <Select className="input h-9 py-1 text-[12.5px]" value={brand} onChange={(e) => setBrand(e.target.value)} aria-label="Brand">
-          <option value="" data-icon={Tag}>All brands</option>
-          {(brands.data?.data || brands.data || []).map((b) => <option key={b.id} value={String(b.id)}>{b.name}</option>)}
-        </Select>
-        <Select className="input h-9 py-1 text-[12.5px]" value={size} onChange={(e) => setSize(e.target.value)} aria-label="Size">
-          <option value="" data-icon={Ruler}>Any size</option>
-          {(facets.data?.sizes || []).map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
-        </Select>
+      <div className="flex gap-2 px-3 pt-2.5">
+        <FilterBox className="flex-1" icon={LayoutGrid} label="Category" placeholder="All" value={cat} onChange={setCat} options={catOptions} />
+        <FilterBox className="flex-1" icon={Tag} label="Brand" placeholder="All brands" value={brand} onChange={setBrand} options={brandList.map((b) => ({ value: b.id, label: b.name }))} />
+        <FilterBox className="flex-[.7]" label="Size" placeholder="Any" value={size} onChange={setSize} options={(facets.data?.sizes || []).map((s) => ({ value: s.name, label: s.name }))} />
       </div>
 
       {/* category pills */}
-      <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 px-3 py-2.5 [scrollbar-width:thin] dark:border-slate-800">
-        <Pill on={!cat} onClick={() => setCat('')} label="All" count={0} />
-        {mains.map((c) => <Pill key={c.id} on={String(cat) === String(c.id)} onClick={() => setCat(String(c.id))} label={c.name} count={countOf(c)} />)}
+      <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 px-3 py-2.5 [scrollbar-width:none] dark:border-slate-800">
+        <Pill on={!pill && (!cat || Boolean(pillParent))} onClick={() => setPill('')} label="All" count={pillParent ? countOf(pillParent) : totals.data?.summary?.products} />
+        {pillCats.map((c) => <Pill key={c.id} on={String(pill || (pillParent ? '' : cat)) === String(c.id)} onClick={() => pickPill(String(c.id))} label={c.name} count={countOf(c)} />)}
         {filtered && (
-          <button type="button" className="ml-auto inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20" onClick={() => { setCat(''); setBrand(''); setSize(''); }}>
+          <button type="button" className="ml-auto inline-flex h-[30px] shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20" onClick={() => { setCat(''); setPill(''); setBrand(''); setSize(''); }}>
             <X className="h-3.5 w-3.5" /> Clear
           </button>
         )}
@@ -105,39 +159,38 @@ export default function Catalog({ onAdd, cartQty, offers, priceMode, reloadKey }
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(7.75rem,1fr))] gap-2.5">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(7.4rem,1fr))] gap-2.5">
                 {items.map((p) => {
                   const q = cartQty[p.variant_id] || 0;
                   const stock = Number(p.stock_qty);
                   const price = priceMode === 'wholesale' && p.wholesale_price !== null && p.wholesale_price !== undefined ? p.wholesale_price : p.retail_price;
                   const o = offerFor(p);
                   const fav = favs[p.product_id] ?? p.is_favorite;
-                  const low = stock > 0 && stock <= Math.max(Number(p.low_stock_alert) || 0, 3);
+                  const low = stock > 0 && stock <= Math.max(Number(p.low_stock_alert) || 0, 6);
                   return (
                     <button type="button" key={p.variant_id} onClick={() => onAdd(p)}
-                      className={cls('group relative flex flex-col overflow-hidden rounded-2xl border bg-white text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-pop active:scale-[.98] dark:bg-slate-900',
+                      className={cls('group relative flex flex-col overflow-hidden rounded-[14px] border bg-white text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-pop active:scale-[.98] dark:bg-slate-900',
                         q ? 'border-ocean-500 ring-[3px] ring-ocean-100 dark:ring-ocean-900/50' : 'border-slate-200 hover:border-ocean-300 dark:border-slate-800',
-                        stock <= 0 && 'opacity-60')}>
-                      <div className="relative aspect-[4/3] w-full bg-slate-50 dark:bg-slate-800/70">
-                        {p.image_path ? <img src={fileUrl(p.image_path)} alt="" loading="lazy" className="h-full w-full object-contain p-1.5" />
-                          : <div className="flex h-full items-center justify-center text-2xl font-black text-ocean-200 dark:text-slate-700">{p.name.slice(0, 2).toUpperCase()}</div>}
-                        {o && <span className="absolute left-1.5 top-1.5 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">{offerBadge(o) || 'Offer'}</span>}
+                        stock <= 0 && 'opacity-[.55]')}>
+                      <div className="relative flex h-[82px] w-full items-center justify-center bg-slate-50 dark:bg-slate-800/60">
+                        {p.image_path ? <img src={fileUrl(p.image_path)} alt="" loading="lazy" className="h-full w-full object-contain p-1" />
+                          : <span className="text-2xl font-black text-ocean-200 dark:text-slate-700">{p.name.slice(0, 2).toUpperCase()}</span>}
+                        {o && <span className="absolute left-[7px] top-[7px] inline-flex h-[19px] items-center rounded-full bg-emerald-50 px-2 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">{offerBadge(o)}</span>}
                         {q > 0
-                          ? <span className="absolute right-1.5 top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-ocean-600 px-1.5 text-[11px] font-extrabold text-white shadow">{num(q)}</span>
+                          ? <span className="absolute right-[7px] top-[7px] flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-ocean-600 px-1.5 text-[11px] font-extrabold text-white">{num(q)}</span>
                           : (
                             <span role="button" tabIndex={-1} aria-label="Favourite" onClick={(e) => toggleFav(e, p)}
-                              className={cls('absolute right-1.5 top-1.5 rounded-full bg-white/90 p-1 shadow-sm transition dark:bg-slate-900/90', !fav && 'opacity-0 group-hover:opacity-100')}>
+                              className={cls('absolute right-[7px] top-[7px] rounded-full bg-white/90 p-1 shadow-sm transition dark:bg-slate-900/90', !fav && 'opacity-0 group-hover:opacity-100')}>
                               <Star className={cls('h-3.5 w-3.5', fav ? 'fill-amber-400 text-amber-400' : 'text-slate-400')} />
                             </span>
                           )}
-                        {stock <= 0 && <span className="absolute inset-x-0 bottom-0 bg-rose-500/90 py-0.5 text-center text-[10px] font-bold uppercase tracking-wide text-white">Out of stock</span>}
                       </div>
-                      <div className="flex flex-1 flex-col p-2.5">
-                        <p className="line-clamp-2 text-[12.5px] font-semibold leading-snug text-slate-800 dark:text-slate-100">{p.name}</p>
-                        <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{[p.size, p.color].filter(Boolean).join(' · ') || p.sku}</p>
-                        <div className="mt-auto flex flex-wrap items-end justify-between gap-x-1 pt-1.5">
-                          <span className="text-[13.5px] font-extrabold tabular-nums text-ocean-700 dark:text-ocean-300">{price === null || price === undefined ? <span className="text-xs text-amber-600">Set price</span> : tk(price)}</span>
-                          {stock > 0 && <span className={cls('text-[10.5px] font-bold tabular-nums', low ? 'text-amber-600' : 'text-emerald-600')}>{num(stock)} left</span>}
+                      <div className="flex flex-1 flex-col px-[9px] pb-[9px] pt-2">
+                        <p className="line-clamp-2 min-h-[31px] text-[12px] font-semibold leading-[1.3] text-slate-900 dark:text-slate-100">{p.name}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">{[p.size, p.color].filter(Boolean).join(' · ') || p.sku}</p>
+                        <div className="mt-1.5 flex items-center justify-between gap-1">
+                          <span className="text-[13px] font-extrabold tabular-nums text-ocean-700 dark:text-ocean-300">{price === null || price === undefined ? <span className="text-[11px] text-amber-600">Set price</span> : tk(price)}</span>
+                          <span className={cls('text-[10.5px] font-bold tabular-nums', stock <= 0 ? 'text-rose-600' : low ? 'text-amber-600' : 'text-emerald-600')}>{stock <= 0 ? 'Out of stock' : `${num(stock)} left`}</span>
                         </div>
                       </div>
                     </button>
@@ -159,8 +212,8 @@ export default function Catalog({ onAdd, cartQty, offers, priceMode, reloadKey }
 function Pill({ on, onClick, label, count }) {
   return (
     <button type="button" onClick={onClick}
-      className={cls('inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition',
-        on ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900' : 'border-slate-200 text-slate-600 hover:border-ocean-300 hover:text-ocean-700 dark:border-slate-700 dark:text-slate-300')}>
+      className={cls('inline-flex h-[30px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-[12px] font-semibold transition',
+        on ? 'border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900' : 'border-slate-200 text-slate-700 hover:border-ocean-300 hover:text-ocean-700 dark:border-slate-700 dark:text-slate-300')}>
       {label}{count > 0 && <span className="text-[11px] font-semibold tabular-nums text-slate-400">{num(count)}</span>}
     </button>
   );

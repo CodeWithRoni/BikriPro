@@ -19,7 +19,8 @@ const EASE = 'transition-all duration-300 ease-in-out';
 export default function Sidebar() {
   const dispatch = useDispatch();
   const { pathname } = useLocation();
-  const collapsed = useSelector((s) => s.ui.sidebarCollapsed);
+  const isPos = pathname.startsWith('/pos');
+  const collapsed = useSelector((s) => s.ui.sidebarCollapsed) || isPos; // the till always uses the slim icon rail
   const mobileOpen = useSelector((s) => s.ui.mobileNavOpen);
   const role = useSelector((s) => s.auth.user?.role);
   const shopName = useSelector((s) => s.settings.data.shop_name);
@@ -86,7 +87,7 @@ export default function Sidebar() {
           onClick={() => dispatch(toggleSidebar())}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="group absolute -right-3.5 top-[4.4rem] z-50 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-md transition-all duration-300 ease-in-out hover:scale-110 hover:border-ocean-400 hover:text-ocean-600 dark:border-slate-700 dark:bg-slate-800 lg:flex"
+          className={cls(isPos ? "!hidden" : "", "group absolute -right-3.5 top-[4.4rem] z-50 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-md transition-all duration-300 ease-in-out hover:scale-110 hover:border-ocean-400 hover:text-ocean-600 dark:border-slate-700 dark:bg-slate-800 lg:flex")}
         >
           {collapsed
             ? <PanelLeftOpen className="h-4 w-4 transition-transform duration-300 ease-in-out group-hover:translate-x-0.5" />

@@ -245,7 +245,8 @@ export const list = asyncHandler(async (req, res) => {
   const rows = await query(
     `SELECT s.id, s.invoice_no, s.sale_date, s.grand_total, s.paid_amount, s.due_amount, s.next_payment_date, s.status, s.exchange_return_id, s.offer_discount,
             c.name AS customer_name, c.phone AS customer_phone, u.name AS cashier,
-            (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) AS item_count
+            (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) AS item_count,
+            (SELECT string_agg(DISTINCT a.name, ' + ') FROM sale_payments sp JOIN accounts a ON a.id = sp.account_id WHERE sp.sale_id = s.id) AS pay_methods
      ${base} ORDER BY ${order} LIMIT ? OFFSET ?`, [...params, limit, offset]);
   res.json({ data: rows, summary: sum, total: sum.total, page, limit });
 });
