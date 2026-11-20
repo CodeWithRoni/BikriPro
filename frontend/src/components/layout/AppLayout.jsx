@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Menu, Sun, Moon, Bell, LogOut, KeyRound, ChevronDown, Cake, Store, AlertTriangle, AlertOctagon, Info, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Sidebar from './Sidebar';
-import { NAV } from './nav';
+import { NAV, isActivePath } from './nav';
 import api, { getBranch, setBranch } from '../../api/client';
 import Select from '../ui/Select';
 import { toggleTheme, setMobileNav, loggedOut, settingsLoaded } from '../../store';
@@ -25,7 +25,7 @@ export default function AppLayout() {
   const [pwOpen, setPwOpen] = useState(false);
   const menuRef = useRef(null);
 
-  const current = pathname.startsWith('/product-setup') ? { label: 'Product Setup' } : NAV.find((n) => pathname.startsWith(n.to));
+  const current = pathname.startsWith('/product-setup') ? { label: 'Product Setup' } : NAV.find((n) => isActivePath(pathname, n.to));
 
   useEffect(() => {
     api.get('/settings').then((r) => dispatch(settingsLoaded(r.data))).catch(() => {});

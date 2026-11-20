@@ -48,3 +48,5 @@
 /* BikriPro drop-down open animation */
 @keyframes bpPop { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
 @keyframes bpPopUp { from { opacity: 0; transform: translateY(4px) scale(.98); } to { opacity: 1; transform: none; } }
+/* Sidebar fly-out (collapsed rail) */
+@keyframes flyIn { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; } }
