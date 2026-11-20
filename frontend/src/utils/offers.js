@@ -12,7 +12,7 @@
 const r2 = (x) => Math.round((Number(x) || 0) * 100) / 100;
 const n = (v) => Number(v) || 0;
 
-function inScope(o, it) {
+export function inScope(o, it) {
   const ids = (o.scope_ids || []).map(Number);
   switch (o.scope) {
     case 'category': return ids.includes(Number(it.category_id));

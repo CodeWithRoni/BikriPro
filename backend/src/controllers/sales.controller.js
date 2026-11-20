@@ -251,28 +251,41 @@ export const list = asyncHandler(async (req, res) => {
 });
 
 // ---------- Hold / Held ----------
+/**
+ * POST /sales/hold { cart, customer_id?, note?, kind?: 'hold'|'quotation', valid_until?, total? }
+ * A quotation gets its own number (QTN-…) and can be printed and turned into a sale later.
+ */
 export const hold = asyncHandler(async (req, res) => {
   const { cart, customer_id = null, note = null } = req.body;
-  if (!cart || !Array.isArray(cart.items) || !cart.items.length) throw badRequest('Nothing to hold');
-  const total = money(cart.items.reduce((t, i) => t + Number(i.qty) * Number(i.unit_price) - Number(i.discount || 0), 0));
-  const id = await transaction(async (conn) => {
-    const ref = await nextNumber(conn, 'hold');
-    const r = await conn.q('INSERT INTO held_invoices (hold_ref, user_id, customer_id, cart_json, item_count, total, note) VALUES (?,?,?,?,?,?,?)',
-      [ref, req.user.id, customer_id, JSON.stringify(cart), cart.items.length, total, note]);
-    return r.insertId;
+  const kind = req.body.kind === 'quotation' ? 'quotation' : 'hold';
+  if (!cart || !Array.isArray(cart.items) || !cart.items.length) throw badRequest(kind === 'quotation' ? 'Add products to the quotation' : 'Nothing to hold');
+  const lines = money(cart.items.reduce((t, i) => t + Number(i.qty) * Number(i.unit_price) - Number(i.discount || 0), 0));
+  const total = req.body.total !== undefined && req.body.total !== null && req.body.total !== '' ? money(req.body.total) : lines;
+  const out = await transaction(async (conn) => {
+    const ref = await nextNumber(conn, kind === 'quotation' ? 'quotation' : 'hold');
+    const r = await conn.q('INSERT INTO held_invoices (hold_ref, user_id, customer_id, cart_json, item_count, total, note, kind, valid_until) VALUES (?,?,?,?,?,?,?,?,?)',
+      [ref, req.user.id, customer_id, JSON.stringify(cart), cart.items.length, total, note, kind, kind === 'quotation' ? (req.body.valid_until || null) : null]);
+    return { id: r.insertId, ref };
   });
-  await logActivity(req, 'sales', 'hold', id);
-  res.status(201).json({ id });
+  await logActivity(req, 'sales', kind, out.id);
+  res.status(201).json({ id: out.id, hold_ref: out.ref, kind });
 });
 
+/** GET /sales/held?kind=hold|quotation — parked carts / quotations of this branch */
 export const listHeld = asyncHandler(async (req, res) => {
+  const where = ['h.kind = ?'];
+  const params = [req.query.kind === 'quotation' ? 'quotation' : 'hold'];
+  scopeFilter(where, params, 'h.branch_id');
+  if (req.query.q) { where.push('(h.hold_ref ILIKE ? OR c.name ILIKE ? OR c.phone ILIKE ?)'); const l = `%${req.query.q}%`; params.push(l, l, l); }
   res.json(await query(
-    `SELECT h.id, h.hold_ref, h.item_count, h.total, h.note, h.created_at, h.customer_id, c.name AS customer_name, u.name AS cashier
-     FROM held_invoices h LEFT JOIN customers c ON c.id = h.customer_id LEFT JOIN users u ON u.id = h.user_id ORDER BY h.id DESC`));
+    `SELECT h.id, h.hold_ref, h.kind, h.valid_until, h.item_count, h.total, h.note, h.created_at, h.customer_id, c.name AS customer_name, c.phone AS customer_phone, u.name AS cashier
+     FROM held_invoices h LEFT JOIN customers c ON c.id = h.customer_id LEFT JOIN users u ON u.id = h.user_id
+     WHERE ${where.join(' AND ')} ORDER BY h.id DESC LIMIT 100`, params));
 });
 
 export const getHeld = asyncHandler(async (req, res) => {
-  const h = await one('SELECT * FROM held_invoices WHERE id = ?', [req.params.id]);
+  const h = await one(`SELECT h.*, c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address, u.name AS cashier
+    FROM held_invoices h LEFT JOIN customers c ON c.id = h.customer_id LEFT JOIN users u ON u.id = h.user_id WHERE h.id = ?`, [req.params.id]);
   if (!h) throw notFound('Held invoice not found');
   h.cart = JSON.parse(h.cart_json);
   delete h.cart_json;

@@ -98,7 +98,7 @@ const RESET_PLANS = {
     'UPDATE sale_returns SET exchange_sale_id = NULL', 'UPDATE sales SET exchange_return_id = NULL',
     'DELETE FROM sales', 'DELETE FROM cash_sessions',
     'UPDATE customers SET loyalty_points = 0, total_purchase = 0',
-    "DELETE FROM number_sequences WHERE name IN ('sale','sale_return','collection','hold','cash_session','online_order')",
+    "DELETE FROM number_sequences WHERE name IN ('sale','sale_return','collection','hold','quotation','cash_session','online_order')",
   ],
   purchases: [
     'DELETE FROM purchase_return_items', 'DELETE FROM purchase_returns', 'DELETE FROM purchase_payments',

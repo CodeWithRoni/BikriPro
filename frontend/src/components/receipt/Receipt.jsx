@@ -19,8 +19,10 @@ export function Receipt({ sale, shop }) {
         {s.shop_bin && <div>BIN: {s.shop_bin}</div>}
       </div>
       <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '3px 0', margin: '4px 0' }}>
-        <div className={row}><span>Invoice</span><b>{sale.invoice_no}</b></div>
+        {sale.is_quotation && <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 700, letterSpacing: 2, marginBottom: 2 }}>QUOTATION</div>}
+        <div className={row}><span>{sale.is_quotation ? 'Quotation' : 'Invoice'}</span><b>{sale.invoice_no}</b></div>
         <div className={row}><span>Date</span><span>{fmtDateTime(sale.sale_date)}</span></div>
+        {sale.valid_until && <div className={row}><span>Valid until</span><b>{fmtDate(sale.valid_until)}</b></div>}
         {sale.customer && !sale.customer.is_walk_in && <div className={row}><span>Customer</span><span>{sale.customer.name}</span></div>}
         {sale.customer?.phone && <div className={row}><span>Phone</span><span>{sale.customer.phone}</span></div>}
         <div className={row}><span>Cashier</span><span>{sale.cashier}</span></div>
@@ -50,7 +52,7 @@ export function Receipt({ sale, shop }) {
         {sale.points_value > 0 && <div className={row}><span>Points ({num(sale.points_redeemed)})</span><span>-{num(sale.points_value)}</span></div>}
         <div className={row} style={{ fontSize: 13, fontWeight: 700 }}><span>TOTAL</span><span>{s.currency_symbol} {num(sale.grand_total)}</span></div>
         {sale.exchange_credit > 0 && <div className={row}><span>Exchange credit</span><span>-{num(sale.exchange_credit)}</span></div>}
-        {sale.payments.map((p, i) => <div key={p.id || i} className={row}><span>Paid ({p.account_name})</span><span>{num(p.amount)}</span></div>)}
+        {(sale.payments || []).map((p, i) => <div key={p.id || i} className={row}><span>Paid ({p.account_name})</span><span>{num(p.amount)}</span></div>)}
         {sale.exchange?.cash_refund > 0 && <div className={row} style={{ fontWeight: 700 }}><span>Cash back (exchange)</span><span>{num(sale.exchange.cash_refund)}</span></div>}
         {sale.change_amount > 0 && <div className={row}><span>Change</span><span>{num(sale.change_amount)}</span></div>}
         {sale.due_amount > 0 && (
@@ -63,7 +65,7 @@ export function Receipt({ sale, shop }) {
         {sale.points_earned > 0 && <div className={row}><span>Points earned</span><span>+{num(sale.points_earned)} (total {num(sale.customer?.loyalty_points)})</span></div>}
       </div>
       <div style={{ textAlign: 'center', marginTop: 8, borderTop: '1px dashed #000', paddingTop: 4 }}>
-        <div>{s.invoice_footer}</div>
+        <div>{sale.is_quotation ? 'Prices are valid until the date above. Stock is not reserved.' : s.invoice_footer}</div>
         <div style={{ fontSize: 9, marginTop: 2 }}>Powered by BikriPro</div>
       </div>
     </div>
